@@ -91,7 +91,6 @@ modules = [
     "hiperdex",
     "hitomi",
     "hotleak",
-    "idolcomplex",
     "imagebam",
     "imagechest",
     "imagefap",
