@@ -1,12 +1,12 @@
 # coding: utf-8
-from .common import Extractor
+from .common import Extractor, Message
 from .. import exception
 
 class SankakuPostExtractor(Extractor):
     """
     Специальный экстрактор для отдельных постов Sankaku/IdolComplex.
     Использует /fu API для получения прямой ссылки.
-    Должен стоять ПЕРВЫМ в файле, чтобы перехватывать ссылки раньше стандартного экстрактора.
+    Должен стоять ПЕРВЫМ в файле.
     """
     category = "sankaku"
     subcategory = "post"
@@ -19,7 +19,6 @@ class SankakuPostExtractor(Extractor):
         self.domain = match.group(1)
         self.post_id = match.group(2)
 
-        # Настраиваем домены API в зависимости от сайта
         if self.domain == 'idolcomplex.com':
             self.api_domain = 'i.sankakuapi.com'
             self.category = 'idolcomplex'
@@ -28,7 +27,7 @@ class SankakuPostExtractor(Extractor):
             self.category = 'sankaku'
 
     def items(self):
-        # 1. Формируем заголовки. Без Referer и User-Agent сервер вернет 403.
+        # 1. Заголовки для API
         base_url = f'https://{self.domain}/'
         headers = {
             'Referer': base_url,
@@ -36,18 +35,14 @@ class SankakuPostExtractor(Extractor):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
 
-        # 2. Формируем URL для "fallback" API (/fu), который часто работает лучше основного
+        # 2. API URL
         api_url = f'https://{self.api_domain}/posts/{self.post_id}/fu'
         
         self.log.debug(f'Force-using fallback API: {api_url}')
 
         try:
-            # self.request() - встроенный метод gallery-dl.
-            # Он обрабатывает ошибки сети, прокси и куки.
             response = self.request(api_url, headers=headers)
             json_data = response.json()
-            
-            # Бывает, что данные лежат сразу в корне, а бывает в поле 'data' (зависит от версии API)
             data = json_data.get('data') if 'data' in json_data else json_data
             
         except exception.HttpError as e:
@@ -64,48 +59,47 @@ class SankakuPostExtractor(Extractor):
 
         file_url = data['file_url']
 
-        # 3. Определяем расширение файла
-        # Сначала пробуем из JSON, если нет — выдираем из URL
+        # 3. Данные файла
         ext = data.get('file_ext') or data.get('extension')
         if not ext:
-            # file.jpg?k=... -> file.jpg -> jpg
             ext = file_url.partition('?')[0].rpartition('.')[2] or 'jpg'
 
-        # Sankaku иногда возвращает null в file_url для удаленных картинок, но preview_url есть
         if 's.sankakucomplex.com/data/preview' in file_url:
              self.log.warning("Original file deleted, only preview available. Skipping.")
              return
 
         file_id = str(data.get('id') or self.post_id)
-        
-        # Имя файла для сохранения
         filename = f"{file_id}.{ext}"
 
-        # 4. Собираем теги для метаданных (необязательно, но полезно)
         tags = []
         if 'tags' in data and isinstance(data['tags'], list):
-            # API может возвращать теги как список словарей или строк
             for t in data['tags']:
                 if isinstance(t, dict):
                     tags.append(t.get('name_en') or t.get('name') or '')
                 elif isinstance(t, str):
                     tags.append(t)
 
-        # 5. ВОЗВРАЩАЕМ ДАННЫЕ (YIELD)
-        yield {
-            "url": file_url,           # Прямая ссылка для скачивания
-            "filename": filename,      # Имя файла
+        # 4. Формируем словарь метаданных
+        post_data = {
+            "url": file_url,
+            "filename": filename,
             "extension": ext,
             "id": file_id,
-            "directory": [self.category], # Папка: sankaku/
-            
-            # Метаданные
             "width": data.get("width"),
             "height": data.get("height"),
             "rating": data.get("rating"),
             "tags": tags,
             "created_at": data.get("created_at"),
-            
-            # !!! ОЧЕНЬ ВАЖНО !!!
             "_headers": headers 
         }
+
+        # 5. ВАЖНО: Возвращаем кортежи (Тип, URL, Данные)
+        
+        # Сначала сообщаем папку/метаданные галереи (для формирования пути)
+        yield Message.Directory, "", post_data
+        
+        # Затем сообщаем сам файл для скачивания
+        yield Message.Url, file_url, post_data
+
+# Ниже должен идти оригинальный класс SankakuExtractor, если он там был,
+# но твой класс должен быть объявлен РАНЬШЕ него.
