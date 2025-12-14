@@ -1,6 +1,6 @@
 # Файл: gallery_dl/extractor/sankaku.py
 # -*- coding: utf-8 -*-
-# ПОСЛЕДНЯЯ ВЕРСИЯ. С ИСПРАВЛЕННЫМ TRY/EXCEPT.
+# ВЕРСИЯ, КОТОРАЯ ХОДИТ ТОЛЬКО НА РАБОЧИЙ /fu ЭНДПОИНТ
 
 from .booru import BooruExtractor
 from .. import exception
@@ -8,6 +8,7 @@ import json
 
 class SankakuPostExtractor(BooruExtractor):
     category = "sankaku"
+    # Регулярка ловит оба сайта
     pattern = r'https?://(?:www\.)?(idolcomplex\.com|sankaku\.app)/posts/(\w+)'
     
     def __init__(self, match):
@@ -21,37 +22,20 @@ class SankakuPostExtractor(BooruExtractor):
             self.domain = domain
             self.api_domain = 'sankakuapi.com'
 
-    def _get_post_data(self, post_id):
-        headers = {'Referer': f'https://{self.domain}/'}
-        try:
-            # --- ПОПЫТКА №1 ---
-            api_url = f'https://{self.api_domain}/posts/{post_id}'
-            self.log.debug(f'Trying main API: {api_url}')
-            response = self.session.get(api_url, headers=headers)
-            
-            # raise_for_status() САМ кинет ошибку HttpError, если статус 404
-            response.raise_for_status() 
-            return response.json()
-
-        except exception.HttpError as e:
-            # --- ПЕРЕХОД К ЗАПАСНОМУ API ---
-            # Проверяем, что ошибка была именно 404
-            if e.response and e.response.status_code == 404:
-                self.log.debug(f'Main API failed with 404 for {post_id}, trying /fu')
-                try:
-                    fallback_url = f'https://{self.api_domain}/posts/{post_id}/fu'
-                    response = self.session.get(fallback_url, headers=headers)
-                    response.raise_for_status()
-                    return response.json().get('data')
-                except Exception as fallback_e:
-                    raise exception.StopExtraction(f'All APIs failed for {post_id}: {fallback_e}')
-            else:
-                # Если была другая ошибка (500, 403) - просто падаем
-                raise
-
+    # Главный метод
     def items(self):
         post_id = self.match.group(2)
-        data = self._get_post_data(post_id)
+        headers = {'Referer': f'https://{self.domain}/'}
+
+        # --- ИДЕМ СРАЗУ НА /fu ---
+        try:
+            api_url = f'https://{self.api_domain}/posts/{post_id}/fu'
+            self.log.debug(f'Force-using fallback API: {api_url}')
+            response = self.session.get(api_url, headers=headers)
+            response.raise_for_status() # Если тут ошибка, значит пост реально не существует
+            data = response.json().get('data')
+        except Exception as e:
+            raise exception.StopExtraction(f'Failed to fetch from /fu API for {post_id}: {e}')
 
         if not data or not data.get('file_url'):
             return
@@ -61,8 +45,9 @@ class SankakuPostExtractor(BooruExtractor):
         file_id = data.get('id') or post_id
         
         metadata = {
-            "id": file_id, "author": (data.get('author') or {}).get('name'),
-            "extension": ext, "_headers": {'Referer': f'https://{self.domain}/'},
+            "id": file_id,
+            "extension": ext,
+            "_headers": headers,
         }
         filename = f"{file_id}.{ext}"
 
