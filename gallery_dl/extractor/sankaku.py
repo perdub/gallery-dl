@@ -1,5 +1,5 @@
 # coding: utf-8
-from ..common import Extractor
+from .common import Extractor
 from .. import exception
 
 class SankakuPostExtractor(Extractor):
@@ -92,7 +92,6 @@ class SankakuPostExtractor(Extractor):
                     tags.append(t)
 
         # 5. ВОЗВРАЩАЕМ ДАННЫЕ (YIELD)
-        # gallery-dl автоматически поймет, что этот словарь описывает файл
         yield {
             "url": file_url,           # Прямая ссылка для скачивания
             "filename": filename,      # Имя файла
@@ -100,7 +99,7 @@ class SankakuPostExtractor(Extractor):
             "id": file_id,
             "directory": [self.category], # Папка: sankaku/
             
-            # Метаданные (сохраняются в JSON/SQL, если включено в конфиге)
+            # Метаданные
             "width": data.get("width"),
             "height": data.get("height"),
             "rating": data.get("rating"),
@@ -108,13 +107,5 @@ class SankakuPostExtractor(Extractor):
             "created_at": data.get("created_at"),
             
             # !!! ОЧЕНЬ ВАЖНО !!!
-            # Передаем заголовки загрузчику файлов.
-            # Если этого не сделать, при скачивании самой картинки будет 403 Forbidden.
             "_headers": headers 
         }
-
-# ---
-# Ниже можно оставить старый класс, если он нужен для поиска по тегам.
-# Но так как gallery-dl идет сверху вниз, для ссылок /posts/ сработает верхний класс.
-# Если старый класс не нужен, остальную часть файла можно не писать.
-# ---
