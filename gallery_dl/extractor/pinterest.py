@@ -162,28 +162,42 @@ class PinterestExtractor(Extractor):
     def _extract_carousel(self, pin, carousel_data):
         files = []
         for slot in carousel_data["carousel_slots"]:
-            # Берем любой доступный размер для получения базового URL
-            size, image = next(iter(slot["images"].items()))
+            # Ищем лучшее доступное изображение, чтобы получить структуру URL
+            images = slot["images"]
+            # Обычно 1200x самое большое превью
+            if "1200x" in images:
+                src = images["1200x"]["url"]
+                replace_from = "/1200x/"
+            else:
+                # Если нет, берем первое попавшееся
+                size, data = next(iter(images.items()))
+                src = data["url"]
+                replace_from = "/" + size + "/"
+
             slot["media_id"] = slot.pop("id")
             
-            # --- ИСПРАВЛЕНИЕ: Генерируем варианты для всех расширений ---
-            base_url = image["url"].replace("/" + size + "/", "/originals/", 1)
-            base_no_ext = base_url.rpartition(".")[0]
+            # Формируем базовый URL для оригиналов (без расширения)
+            # Пример: https://i.pinimg.com/originals/ab/cd/ef/hash
+            base = src.replace(replace_from, "/originals/", 1).rpartition(".")[0]
             
-            # Предполагаем jpg по умолчанию, но добавляем png и webp в fallback
+            # Список возможных расширений. 
+            # Pinterest хранит оригиналы обычно в jpg или png.
             exts = ["jpg", "png", "webp", "gif"]
             
-            # Пытаемся угадать расширение из текущего URL (хотя там чаще всего jpg)
-            current_ext = base_url.rpartition(".")[2]
-            if current_ext in exts:
-                # Перемещаем текущее расширение в начало списка приоритетов
-                exts.remove(current_ext)
-                exts.insert(0, current_ext)
+            # Определяем текущее расширение превью
+            curr_ext = src.rpartition(".")[2]
             
-            slot["url"] = base_no_ext + "." + exts[0]
-            slot["_fallback"] = tuple(base_no_ext + "." + ext for ext in exts[1:])
-            # -----------------------------------------------------------
-
+            # Ставим текущее расширение первым в списке приоритетов
+            if curr_ext in exts:
+                exts.remove(curr_ext)
+                exts.insert(0, curr_ext)
+            
+            # Основная ссылка
+            slot["url"] = f"{base}.{exts[0]}"
+            
+            # Запасные ссылки (gallery-dl попробует их, если основная вернет 403/404)
+            slot["_fallback"] = [f"{base}.{e}" for e in exts[1:]]
+            
             files.append(slot)
         return files
 
