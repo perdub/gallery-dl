@@ -162,32 +162,55 @@ class PinterestExtractor(Extractor):
     def _extract_carousel(self, pin, carousel_data):
         files = []
         for slot in carousel_data["carousel_slots"]:
+            # Берем любой доступный размер для получения базового URL
             size, image = next(iter(slot["images"].items()))
             slot["media_id"] = slot.pop("id")
-            slot["url"] = image["url"].replace(
-                "/" + size + "/", "/originals/", 1)
+            
+            # --- ИСПРАВЛЕНИЕ: Генерируем варианты для всех расширений ---
+            base_url = image["url"].replace("/" + size + "/", "/originals/", 1)
+            base_no_ext = base_url.rpartition(".")[0]
+            
+            # Предполагаем jpg по умолчанию, но добавляем png и webp в fallback
+            exts = ["jpg", "png", "webp", "gif"]
+            
+            # Пытаемся угадать расширение из текущего URL (хотя там чаще всего jpg)
+            current_ext = base_url.rpartition(".")[2]
+            if current_ext in exts:
+                # Перемещаем текущее расширение в начало списка приоритетов
+                exts.remove(current_ext)
+                exts.insert(0, current_ext)
+            
+            slot["url"] = base_no_ext + "." + exts[0]
+            slot["_fallback"] = tuple(base_no_ext + "." + ext for ext in exts[1:])
+            # -----------------------------------------------------------
+
             files.append(slot)
         return files
 
     def _extract_image(self, page, block):
         sig = block.get("image_signature") or page["image_signature"]
+        
+        # --- ИСПРАВЛЕНИЕ: Тоже добавляем fallback для Story Pins ---
         url_base = (f"https://i.pinimg.com/originals"
                     f"/{sig[0:2]}/{sig[2:4]}/{sig[4:6]}/{sig}.")
+        
+        # Генерируем варианты
         url_jpg = url_base + "jpg"
         url_png = url_base + "png"
         url_webp = url_base + "webp"
+        
+        fallbacks = (url_png, url_webp, url_jpg) # Порядок: пробуем png, потом webp, потом jpg (если основной не сработал)
 
         try:
             media = block["image"]["images"]["originals"]
+            # Если оригинал есть в JSON, используем его, но добавляем fallback на всякий случай
+            if "_fallback" not in media:
+                media["_fallback"] = fallbacks
         except Exception:
-            media = {"url": url_jpg, "_fallback": (url_png, url_webp,)}
+            # Если оригинала нет, ставим jpg основным, а остальные в fallback
+            media = {"url": url_jpg, "_fallback": fallbacks}
 
-        if media["url"] == url_jpg:
-            media["_fallback"] = (url_png, url_webp,)
-        else:
-            media["_fallback"] = (url_jpg, url_png, url_webp,)
         media["media_id"] = sig
-
         return media
 
     def _extract_video(self, video):
