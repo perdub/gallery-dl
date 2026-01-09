@@ -39,7 +39,9 @@ class YoutubeDLDownloader(DownloaderBase):
 
     def download(self, url, pathfmt):
         kwdict = pathfmt.kwdict
+        tries = 0
 
+        kwdict["_mtime_http"] = None
         if ytdl_instance := kwdict.pop("_ytdl_instance", None):
             # 'ytdl' extractor
             self._prepare(ytdl_instance)
@@ -67,7 +69,8 @@ class YoutubeDLDownloader(DownloaderBase):
                 self.log.debug("Using %s version %s", module, ytdl_version)
 
                 self.ytdl_instance = ytdl_instance = ytdl.construct_YoutubeDL(
-                    module, self, self.ytdl_opts)
+                    module, self, self.ytdl_opts, kwdict.get("_ytdl_params"))
+                self.ytdl_pp = module.postprocessor
                 if self.outtmpl == "default":
                     self.outtmpl = module.DEFAULT_OUTTMPL
                 self._prepare(ytdl_instance)
@@ -79,10 +82,8 @@ class YoutubeDLDownloader(DownloaderBase):
                 for cookie in self.session.cookies:
                     set_cookie(cookie)
 
-            tries = 0
             url = url[5:]
             manifest = kwdict.get("_ytdl_manifest")
-
             while True:
                 tries += 1
                 self.error = None
@@ -171,23 +172,27 @@ class YoutubeDLDownloader(DownloaderBase):
 
         type = kwdict["_ytdl_manifest"]
         data = kwdict.get("_ytdl_manifest_data")
+        remux = kwdict.get("_ytdl_manifest_remux")
         headers = kwdict.get("_ytdl_manifest_headers")
         if type == "hls":
+            ext = "ytdl" if remux else "mp4"
+            protocol = "m3u8_native"
+
             if data is None:
                 try:
                     fmts, subs = extr._extract_m3u8_formats_and_subtitles(
-                        url, video_id, "mp4", headers=headers)
+                        url, video_id, ext, protocol, headers=headers)
                 except AttributeError:
                     fmts = extr._extract_m3u8_formats(
-                        url, video_id, "mp4", headers=headers)
+                        url, video_id, ext, protocol, headers=headers)
                     subs = None
             else:
                 try:
                     fmts, subs = extr._parse_m3u8_formats_and_subtitles(
-                        data, url, "mp4", headers=headers)
+                        data, url, ext, protocol, headers=headers)
                 except AttributeError:
                     fmts = extr._parse_m3u8_formats(
-                        data, url, "mp4", headers=headers)
+                        data, url, ext, protocol, headers=headers)
                     subs = None
 
         elif type == "dash":
@@ -224,7 +229,13 @@ class YoutubeDLDownloader(DownloaderBase):
             "formats"  : fmts,
             "subtitles": subs,
         }
-        return ytdl.process_ie_result(info_dict, download=False)
+        info_dict = ytdl.process_ie_result(info_dict, download=False)
+
+        if remux:
+            info_dict["__postprocessors"] = [
+                self.ytdl_pp.FFmpegVideoRemuxerPP(self.ytdl_instance, remux)]
+
+        return info_dict
 
     def _download_video(self, ytdl_instance, pathfmt, info_dict):
         if "url" in info_dict:
@@ -251,7 +262,7 @@ class YoutubeDLDownloader(DownloaderBase):
             pathfmt.path = pathfmt.directory + filename
             pathfmt.realpath = pathfmt.temppath = (
                 pathfmt.realdirectory + filename)
-        else:
+        elif info_dict["ext"] != "ytdl":
             pathfmt.set_extension(info_dict["ext"])
             pathfmt.build_path()
 

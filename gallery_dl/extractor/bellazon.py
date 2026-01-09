@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2025 Mike Fährmann
+# Copyright 2025-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -24,7 +24,7 @@ class BellazonExtractor(Extractor):
     archive_fmt = "{post[id]}/{id}_{filename}"
 
     def items(self):
-        native = (f"{self.root}/", f"{self.root[6:]}/")
+        native = (self.root + "/", self.root[6:] + "/")
         extract_urls = text.re(
             r'(?s)<('
             r'(?:video .*?<source [^>]*?src|a [^>]*?href)="([^"]+).*?</a>'
@@ -49,7 +49,11 @@ class BellazonExtractor(Extractor):
             yield Message.Directory, "", data
             data["num"] = data["num_internal"] = data["num_external"] = 0
             for info, url, url_img in urls:
-                url = text.unescape(url or url_img)
+                if url_img:
+                    url = text.unescape(
+                        text.extr(info, 'data-full-image="', '"') or url_img)
+                else:
+                    url = text.unescape(url)
 
                 if url.startswith(native):
                     if (
@@ -82,7 +86,7 @@ class BellazonExtractor(Extractor):
                         dc["extension"] = text.ext_from_url(url)
 
                     if url[0] == "/":
-                        url = f"https:{url}"
+                        url = "https:" + url
                     yield Message.Url, url, dc
 
                 else:
@@ -91,10 +95,10 @@ class BellazonExtractor(Extractor):
                     yield Message.Queue, url, data
 
     def _pagination(self, base, pnum=None):
-        base = f"{self.root}{base}"
+        base = self.root + base
 
         if pnum is None:
-            url = f"{base}/"
+            url = base + "/"
             pnum = 1
         else:
             url = f"{base}/page/{pnum}/"
@@ -112,7 +116,7 @@ class BellazonExtractor(Extractor):
             url = f"{base}/page/{pnum}/"
 
     def _pagination_reverse(self, base, pnum=None):
-        base = f"{self.root}{base}"
+        base = self.root + base
 
         url = f"{base}/page/{'9999' if pnum is None else pnum}/"
         with self.request(url) as response:
@@ -127,7 +131,7 @@ class BellazonExtractor(Extractor):
             if pnum > 1:
                 url = f"{base}/page/{pnum}/"
             elif pnum == 1:
-                url = f"{base}/"
+                url = base + "/"
             else:
                 return
 
@@ -157,8 +161,9 @@ class BellazonExtractor(Extractor):
             "author_url"  : url_a,
         }
 
-        thread["id"], _, thread["slug"] = \
+        thread["id"], _, slug = \
             url_t.rsplit("/", 2)[1].partition("-")
+        thread["slug"] = text.unquote(slug)
 
         if url_a:
             thread["author_id"], _, thread["author_slug"] = \
@@ -192,15 +197,15 @@ class BellazonExtractor(Extractor):
 
 class BellazonPostExtractor(BellazonExtractor):
     subcategory = "post"
-    pattern = (rf"{BASE_PATTERN}(/topic/\d+-[\w-]+(?:/page/\d+)?)"
-               rf"/?#(?:findC|c)omment-(\d+)")
+    pattern = (BASE_PATTERN + r"(/topic/\d+-[^/?#]+(?:/page/\d+)?)"
+               r"/?#(?:findC|c)omment-(\d+)")
     example = "https://www.bellazon.com/main/topic/123-SLUG/#findComment-12345"
 
     def posts(self):
         path, post_id = self.groups
-        page = self.request(f"{self.root}{path}").text
+        page = self.request(self.root + path).text
 
-        pos = page.find(f'id="elComment_{post_id}')
+        pos = page.find('id="elComment_' + post_id)
         if pos < 0:
             raise exception.NotFoundError("post")
         html = text.extract(page, "<article ", "</article>", pos-100)[0]
@@ -211,7 +216,7 @@ class BellazonPostExtractor(BellazonExtractor):
 
 class BellazonThreadExtractor(BellazonExtractor):
     subcategory = "thread"
-    pattern = rf"{BASE_PATTERN}(/topic/\d+-[\w-]+)(?:/page/(\d+))?"
+    pattern = BASE_PATTERN + r"(/topic/\d+-[^/?#]+)(?:/page/(\d+))?"
     example = "https://www.bellazon.com/main/topic/123-SLUG/"
 
     def posts(self):
@@ -236,7 +241,7 @@ class BellazonThreadExtractor(BellazonExtractor):
 
 class BellazonForumExtractor(BellazonExtractor):
     subcategory = "forum"
-    pattern = rf"{BASE_PATTERN}(/forum/\d+-[\w-]+)(?:/page/(\d+))?"
+    pattern = BASE_PATTERN + r"(/forum/\d+-[^/?#]+)(?:/page/(\d+))?"
     example = "https://www.bellazon.com/main/forum/123-SLUG/"
 
     def items(self):

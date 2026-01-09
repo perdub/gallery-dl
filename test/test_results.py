@@ -56,14 +56,14 @@ AUTH_REQUIRED = {
     "poipiku",
 }
 
-AUTH_KEYS = (
+AUTH_KEYS = {
     "username",
     "cookies",
     "api-key",
     "client-id",
     "access-token",
     "refresh-token",
-)
+}
 
 
 class TestExtractorResults(unittest.TestCase):
@@ -145,7 +145,7 @@ class TestExtractorResults(unittest.TestCase):
             for key in AUTH_KEYS:
                 config.set((), key, None)
 
-        if auth and not any(extr.config(key) for key in AUTH_KEYS):
+        if auth and not self._has_auth(extr, auth):
             self._skipped.append((result["#url"], "no auth"))
             self.skipTest("no auth")
 
@@ -201,7 +201,7 @@ class TestExtractorResults(unittest.TestCase):
                     extr = kwdict["_extractor"].from_url(url)
                     if extr is None and not result.get("#extractor", True):
                         continue
-                    self.assertIsInstance(extr, kwdict["_extractor"])
+                    self.assertIsInstance(extr, kwdict["_extractor"], msg=url)
                     self.assertEqual(extr.url, url)
         else:
             # test 'extension' entries
@@ -271,6 +271,19 @@ class TestExtractorResults(unittest.TestCase):
             for kwdict in kwdicts:
                 self._test_kwdict(kwdict, metadata)
 
+    def _has_auth(self, extr, auth):
+        if auth is True:
+            auth = AUTH_KEYS
+
+        if isinstance(auth, str):
+            return extr.config(auth)
+        if isinstance(auth, set):
+            return any(self._has_auth(extr, a) for a in auth)
+        if isinstance(auth, (tuple, list)):
+            return all(self._has_auth(extr, k) for k in auth)
+
+        self.fail(f"Invalid '#auth' value: {auth!r}")
+
     def _test_kwdict(self, kwdict, tests, parent=None):
         for key, test in tests.items():
 
@@ -310,6 +323,8 @@ class TestExtractorResults(unittest.TestCase):
         elif isinstance(test, range):
             self.assertRange(value, test, msg=path)
         elif isinstance(test, set):
+            if isinstance(value, list):
+                value = tuple(value)
             for item in test:
                 if isinstance(item, type) and isinstance(value, item) or \
                         value == item:
@@ -398,6 +413,7 @@ class ResultJob(job.DownloadJob):
         self.queue = False
         self.content = content
 
+        self.format = format
         self.url_list = []
         self.url_hash = hashlib.sha1()
         self.kwdict_list = []
@@ -412,18 +428,6 @@ class ResultJob(job.DownloadJob):
         else:
             self._update_content = lambda url, kwdict: None
 
-        if format:
-            self.format_directory = TestFormatter(
-                "".join(self.extractor.directory_fmt)).format_map
-            self.format_filename = TestFormatter(
-                self.extractor.filename_fmt).format_map
-            self.format_archive = TestFormatter(
-                self.extractor.archive_fmt).format_map
-        else:
-            self.format_directory = \
-                self.format_filename = \
-                self.format_archive = lambda kwdict: ""
-
     def run(self):
         self._init()
         self.dispatch(self.extractor)
@@ -436,6 +440,20 @@ class ResultJob(job.DownloadJob):
         self.format_filename(kwdict)
 
     def handle_directory(self, kwdict):
+        if self.format is not None:
+            if self.format:
+                self.format_directory = TestFormatter(
+                    "".join(self.extractor.directory_fmt)).format_map
+                self.format_filename = TestFormatter(
+                    self.extractor.filename_fmt).format_map
+                self.format_archive = TestFormatter(
+                    self.extractor.archive_fmt).format_map
+            else:
+                self.format_directory = \
+                    self.format_filename = \
+                    self.format_archive = lambda kwdict: ""
+            self.format = None
+
         self._update_kwdict(kwdict, False)
         self.format_directory(kwdict)
 
@@ -519,6 +537,9 @@ class TestFormatter(formatter.StringFormatter):
                     return fmt(obj[key])
                 except KeyError:
                     return ""
+        elif "<function identity at " in repr(fmt):
+            def wrap(obj):
+                return "".join(obj[key])
         else:
             def wrap(obj):
                 return fmt(obj[key])
@@ -531,6 +552,9 @@ class TestFormatter(formatter.StringFormatter):
                 for func in funcs:
                     obj = func(obj)
                 return fmt(obj)
+        elif "<function identity at " in repr(fmt):
+            def wrap(obj):
+                return "".join(obj[key])
         else:
             def wrap(obj):
                 obj = obj[key]

@@ -70,8 +70,8 @@ class MangaparkBase():
 
 class MangaparkChapterExtractor(MangaparkBase, ChapterExtractor):
     """Extractor for manga-chapters from mangapark.net"""
-    pattern = (rf"{BASE_PATTERN}/"
-               rf"(?:title/[^/?#]+/|comic/\d+/[^/?#]+/[^/?#]+-i)(\d+)")
+    pattern = (BASE_PATTERN +
+               r"/(?:title/[^/?#]+/|comic/\d+/[^/?#]+/[^/?#]+-i)(\d+)")
     example = "https://mangapark.net/title/MANGA/12345-en-ch.01"
 
     def __init__(self, match):
@@ -101,7 +101,7 @@ class MangaparkChapterExtractor(MangaparkBase, ChapterExtractor):
             "language"  : util.code_to_language(lang),
             "source"    : chapter["srcTitle"],
             "source_id" : chapter["sourceId"],
-            "date"      : self.parse_timestamp(chapter["dateCreate"] // 1000),
+            "date"      : self.parse_timestamp(chapter["dateCreate"] / 1000),
         }
 
     def images(self, _):
@@ -111,7 +111,7 @@ class MangaparkChapterExtractor(MangaparkBase, ChapterExtractor):
 class MangaparkMangaExtractor(MangaparkBase, Extractor):
     """Extractor for manga from mangapark.net"""
     subcategory = "manga"
-    pattern = rf"{BASE_PATTERN}/(?:title|comic)/(\d+)(?:[/-][^/?#]*)?/?$"
+    pattern = BASE_PATTERN + r"/(?:title|comic)/(\d+)(?:[/-][^/?#]*)?/?$"
     example = "https://mangapark.net/title/12345-MANGA"
 
     def __init__(self, match):
@@ -139,7 +139,7 @@ class MangaparkMangaExtractor(MangaparkBase, Extractor):
                 "source"    : chapter["srcTitle"],
                 "source_id" : chapter["sourceId"],
                 "date"      : self.parse_timestamp(
-                    chapter["dateCreate"] // 1000),
+                    chapter["dateCreate"] / 1000),
                 "_extractor": MangaparkChapterExtractor,
             }
             yield Message.Queue, url, data

@@ -26,7 +26,7 @@ class ZerochanExtractor(BooruExtractor):
     per_page = 200
     cookies_domain = ".zerochan.net"
     cookies_names = ("z_id", "z_hash")
-    useragent = util.USERAGENT
+    useragent = util.USERAGENT_GALLERYDL
     request_interval = (0.5, 1.5)
 
     def login(self):
@@ -160,7 +160,7 @@ class ZerochanExtractor(BooruExtractor):
 class ZerochanTagExtractor(ZerochanExtractor):
     subcategory = "tag"
     directory_fmt = ("{category}", "{search_tags}")
-    pattern = rf"{BASE_PATTERN}/(?!\d+$)([^/?#]+)/?(?:\?([^#]+))?"
+    pattern = BASE_PATTERN + r"/(?!\d+$)([^/?#]+)/?(?:\?([^#]+))?"
     example = "https://www.zerochan.net/TAG"
 
     def __init__(self, match):
@@ -173,7 +173,6 @@ class ZerochanTagExtractor(ZerochanExtractor):
             self.per_page = 24
         else:
             self.posts = self.posts_api
-            self.session.headers["User-Agent"] = util.USERAGENT
 
         if exts := self.config("extensions"):
             if isinstance(exts, str):
@@ -286,7 +285,7 @@ class ZerochanTagExtractor(ZerochanExtractor):
 
 class ZerochanImageExtractor(ZerochanExtractor):
     subcategory = "image"
-    pattern = rf"{BASE_PATTERN}/(\d+)"
+    pattern = BASE_PATTERN + r"/(\d+)"
     example = "https://www.zerochan.net/12345"
 
     def posts(self):
