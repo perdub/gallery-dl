@@ -162,32 +162,69 @@ class PinterestExtractor(Extractor):
     def _extract_carousel(self, pin, carousel_data):
         files = []
         for slot in carousel_data["carousel_slots"]:
-            size, image = next(iter(slot["images"].items()))
+            # Ищем лучшее доступное изображение, чтобы получить структуру URL
+            images = slot["images"]
+            # Обычно 1200x самое большое превью
+            if "1200x" in images:
+                src = images["1200x"]["url"]
+                replace_from = "/1200x/"
+            else:
+                # Если нет, берем первое попавшееся
+                size, data = next(iter(images.items()))
+                src = data["url"]
+                replace_from = "/" + size + "/"
+
             slot["media_id"] = slot.pop("id")
-            slot["url"] = image["url"].replace(
-                "/" + size + "/", "/originals/", 1)
+            
+            # Формируем базовый URL для оригиналов (без расширения)
+            # Пример: https://i.pinimg.com/originals/ab/cd/ef/hash
+            base = src.replace(replace_from, "/originals/", 1).rpartition(".")[0]
+            
+            # Список возможных расширений. 
+            # Pinterest хранит оригиналы обычно в jpg или png.
+            exts = ["jpg", "png", "webp", "gif"]
+            
+            # Определяем текущее расширение превью
+            curr_ext = src.rpartition(".")[2]
+            
+            # Ставим текущее расширение первым в списке приоритетов
+            if curr_ext in exts:
+                exts.remove(curr_ext)
+                exts.insert(0, curr_ext)
+            
+            # Основная ссылка
+            slot["url"] = f"{base}.{exts[0]}"
+            
+            # Запасные ссылки (gallery-dl попробует их, если основная вернет 403/404)
+            slot["_fallback"] = [f"{base}.{e}" for e in exts[1:]]
+            
             files.append(slot)
         return files
 
     def _extract_image(self, page, block):
         sig = block.get("image_signature") or page["image_signature"]
+        
+        # --- ИСПРАВЛЕНИЕ: Тоже добавляем fallback для Story Pins ---
         url_base = (f"https://i.pinimg.com/originals"
                     f"/{sig[0:2]}/{sig[2:4]}/{sig[4:6]}/{sig}.")
+        
+        # Генерируем варианты
         url_jpg = url_base + "jpg"
         url_png = url_base + "png"
         url_webp = url_base + "webp"
+        
+        fallbacks = (url_png, url_webp, url_jpg) # Порядок: пробуем png, потом webp, потом jpg (если основной не сработал)
 
         try:
             media = block["image"]["images"]["originals"]
+            # Если оригинал есть в JSON, используем его, но добавляем fallback на всякий случай
+            if "_fallback" not in media:
+                media["_fallback"] = fallbacks
         except Exception:
-            media = {"url": url_jpg, "_fallback": (url_png, url_webp,)}
+            # Если оригинала нет, ставим jpg основным, а остальные в fallback
+            media = {"url": url_jpg, "_fallback": fallbacks}
 
-        if media["url"] == url_jpg:
-            media["_fallback"] = (url_png, url_webp,)
-        else:
-            media["_fallback"] = (url_jpg, url_png, url_webp,)
         media["media_id"] = sig
-
         return media
 
     def _extract_video(self, video):
