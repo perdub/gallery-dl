@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright 2021-2025 Mike Fährmann
+# Copyright 2021-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -51,19 +51,61 @@ class TestDownloadJob(TestJob):
         func = tjob._build_extractor_filter()
         self.assertEqual(func(TestExtractor)      , False)
         self.assertEqual(func(TestExtractorParent), False)
-        self.assertEqual(func(TestExtractorAlt)   , True)
+        self.assertEqual(func(TestExtractorNoop)  , True)
 
         config.set((), "blacklist", ":test_subcategory")
         func = tjob._build_extractor_filter()
         self.assertEqual(func(TestExtractor)      , False)
         self.assertEqual(func(TestExtractorParent), True)
-        self.assertEqual(func(TestExtractorAlt)   , False)
+        self.assertEqual(func(TestExtractorNoop)  , False)
 
         config.set((), "whitelist", "test_category:test_subcategory")
         func = tjob._build_extractor_filter()
         self.assertEqual(func(TestExtractor)      , True)
         self.assertEqual(func(TestExtractorParent), False)
-        self.assertEqual(func(TestExtractorAlt)   , False)
+        self.assertEqual(func(TestExtractorNoop)  , False)
+
+    def test_opt_init(self):
+        config.set((), "init", True)
+        config.set((), "archive", ":memory:")
+        config.set((), "postprocessors", "directory")
+
+        extr = TestExtractorNoop.from_url("test:noop")
+        tjob = self.jobclass(extr)
+        tjob._init()
+
+        self.assertTrue(tjob.pathfmt)
+        self.assertTrue(tjob.archive)
+        self.assertTrue(tjob.hooks)
+
+    def test_opt_init_false(self):
+        config.set((), "init", False)
+        config.set((), "archive", ":memory:")
+        config.set((), "postprocessors", "directory")
+
+        extr = TestExtractorNoop.from_url("test:noop")
+        tjob = self.jobclass(extr)
+        tjob._init()
+
+        self.assertFalse(tjob.pathfmt)
+        self.assertFalse(tjob.archive)
+        self.assertFalse(tjob.hooks)
+
+    def test_parent_metadata_extractor(self):
+        config.set((), "parent-metadata", True)
+
+        config.set(("output",), "mode", False)
+        config.set((), "download", False)
+
+        config.set((), "postprocessors", [{
+            "name"  : "metadata/print@init",
+            "format": "{num}",
+        }])
+
+        extr = TestExtractorParent.from_url("test:parent:3")
+        out = self._capture_stdout(extr)
+        # no output if '_extractor' is overwritten (#8958)
+        self.assertEqual(out, "11\n")
 
 
 class TestKeywordJob(TestJob):
@@ -122,6 +164,13 @@ user['self']
   <circular reference>
 """)
 
+    def test_opt_init(self):
+        config.set((), "init", True)
+
+        extr = TestExtractorNoop.from_url("test:noop")
+        tjob = self.jobclass(extr)
+        tjob._init()
+
 
 class TestUrlJob(TestJob):
     jobclass = job.UrlJob
@@ -158,11 +207,32 @@ test:child
 
     def test_child(self):
         extr = TestExtractorParent.from_url("test:parent")
-        tjob = job.UrlJob(extr, depth=0)
+        tjob = self.jobclass(extr, depth=0)
         self.assertEqual(self._capture_stdout(tjob), 3 * """\
 https://example.org/1.jpg
 https://example.org/2.jpg
 https://example.org/3.jpg
+""")
+
+    def test_opt_init(self):
+        config.set((), "init", True)
+
+        extr = TestExtractorNoop.from_url("test:noop")
+        tjob = self.jobclass(extr)
+        tjob._init()
+
+    def test_opt_follow(self):
+        config.set((), "follow", "{user[bio]}")
+
+        extr = TestExtractor.from_url("test:urls")
+        tjob = self.jobclass(extr)
+        self.assertEqual(self._capture_stdout(tjob), """\
+https://example.org/1.jpg
+https://example.org/2.jpg
+https://example.org/3.jpg
+https://example1.org/content/abc
+https://example2.org/content?query=123
+https://example3.org/content/#frag
 """)
 
 
@@ -227,6 +297,13 @@ Directory format (default):
   ["{category}"]
 
 """)
+
+    def test_opt_init(self):
+        config.set((), "init", True)
+
+        extr = TestExtractorNoop.from_url("test:noop")
+        tjob = self.jobclass(extr)
+        tjob._init()
 
 
 class TestDataJob(TestJob):
@@ -359,19 +436,101 @@ class TestDataJob(TestJob):
         self.assertEqual(tjob.data[-1][0], Message.Url)
         self.assertEqual(tjob.data[-1][2]["num"], "3")
 
+    def test_jsonl(self):
+        extr = TestExtractor.from_url("test:")
+        tjob = self.jobclass(extr, file=io.StringIO())
+        with patch("gallery_dl.job.DataJob.out") as out:
+            tjob.run()
+        self.assertEqual(len(out.call_args_list), 0)
+
+        config.set(("output",), "jsonl", True)
+        extr = TestExtractor.from_url("test:")
+        file = io.StringIO()
+        tjob = self.jobclass(extr, file=file)
+        with patch("gallery_dl.job.DataJob.out") as out:
+            tjob.run()
+        self.assertEqual(len(out.call_args_list), 4)
+
+        tjob.run()
+        for line in file.getvalue().split():
+            self.assertRegex(line, r"""^\[[23],("http[^"]+",)?\{.+\}\]$""")
+
+    def test_opt_init(self):
+        config.set((), "init", True)
+
+        extr = TestExtractorNoop.from_url("test:noop")
+        tjob = self.jobclass(extr)
+        tjob._init()
+
+    def test_opt_follow(self):
+        config.set((), "follow", "{user[bio]!R}")
+
+        extr = TestExtractor.from_url("test:urls")
+        tjob = self.jobclass(extr, file=None)
+        tjob.run()
+        self.assertEqual(tjob.data_urls, [
+            "https://example.org/1.jpg",
+            "https://example.org/2.jpg",
+            "https://example.org/3.jpg",
+            "https://example1.org/content/abc",
+            "https://example2.org/content?query=123",
+            "https://example3.org/content/#frag"
+        ])
+
+    def test_resolve(self):
+        extr = TestExtractorParent.from_url("test:parent:3")
+        tjob = self.jobclass(extr, file=None, resolve=0)
+        tjob.run()
+        self.assertEqual(len(tjob.data_urls), 3)
+        for url in tjob.data_urls:
+            self.assertEqual(url, "test:parent:2")
+
+        extr = TestExtractorParent.from_url("test:parent:3")
+        tjob = self.jobclass(extr, file=None, resolve=1)
+        tjob.run()
+        self.assertEqual(len(tjob.data_urls), 9)
+        for url in tjob.data_urls:
+            self.assertEqual(url, "test:parent:1")
+
+        extr = TestExtractorParent.from_url("test:parent")
+        tjob = self.jobclass(extr, file=None, resolve=64)
+        tjob.run()
+        self.assertEqual(len(tjob.data_urls), 9)
+        for url in tjob.data_urls:
+            self.assertRegex(url, r"^https://example.org/\d\.jpg$")
+
+        extr = TestExtractorParent.from_url("test:parent:1")
+        tjob = self.jobclass(extr, file=None, resolve=64)
+        tjob.run()
+        self.assertEqual(len(tjob.data_urls), 27)
+
+        extr = TestExtractorParent.from_url("test:parent:2")
+        tjob = self.jobclass(extr, file=None, resolve=64)
+        tjob.run()
+        self.assertEqual(len(tjob.data_urls), 81)
+
 
 class TestExtractor(Extractor):
     category = "test_category"
     subcategory = "test_subcategory"
     directory_fmt = ("{category}",)
     filename_fmt = "test_{filename}.{extension}"
-    pattern = r"test:(child|self)?$"
+    pattern = r"test:(child|self|urls)?$"
 
     def __init__(self, match):
         Extractor.__init__(self, match)
         self.user = {"id": 123, "name": "test"}
         if match[1] == "self":
             self.user["self"] = self.user
+        elif match[1] == "urls":
+            self.user["bio"] = """
+Site 1:
+* https://example1.org/content/abc
+Site 2:
+* https://example2.org/content?query=123
+
+<a href="https://example3.org/content/#frag">Site 3</a>
+"""
 
     def items(self):
         root = "https://example.org"
@@ -396,16 +555,22 @@ class TestExtractor(Extractor):
 class TestExtractorParent(Extractor):
     category = "test_category"
     subcategory = "test_subcategory_parent"
-    pattern = r"test:parent"
+    pattern = r"test:parent(:\d+)?"
 
     def items(self):
-        url = "test:child"
+        level = self.groups[0]
+        if level in {None, ":0"}:
+            url = "test:child"
+            extr = TestExtractor
+        else:
+            url = f"test:parent:{int(level[1:])-1}"
+            extr = TestExtractorParent
 
         for i in range(11, 14):
             yield Message.Queue, url, {
                 "num" : i,
                 "tags": ["abc", "def"],
-                "_extractor": TestExtractor,
+                "_extractor": extr,
             }
 
 
@@ -418,9 +583,10 @@ class TestExtractorException(Extractor):
         return 1/0
 
 
-class TestExtractorAlt(Extractor):
+class TestExtractorNoop(Extractor):
     category = "test_category_alt"
     subcategory = "test_subcategory"
+    pattern = r"test:noop"
 
 
 if __name__ == "__main__":

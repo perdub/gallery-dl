@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2025 Mike Fährmann
+# Copyright 2025-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -49,14 +49,14 @@ class WeebdexChapterExtractor(WeebdexBase, ChapterExtractor):
         return {
             **_manga_info(self, rel["manga"]["id"]),
             "title"   : data.get("title", ""),
-            "version" : data["version"],
-            "volume"  : text.parse_int(data["volume"]),
+            "version" : data.get("version", 0),
+            "volume"  : text.parse_int(data.get("volume")),
             "chapter" : text.parse_int(chapter),
             "chapter_minor": sep + minor,
             "chapter_id"   : cid,
-            "date"         : self.parse_datetime_iso(data["created_at"]),
-            "date_updated" : self.parse_datetime_iso(data["updated_at"]),
-            "lang"    : data["language"],
+            "date"         : self.parse_datetime_iso(data.get("created_at")),
+            "date_updated" : self.parse_datetime_iso(data.get("updated_at")),
+            "lang"    : data.get("language"),
             "uploader": rel["uploader"]["name"] if "uploader" in rel else "",
             "group"   : [g["name"] for g in rel.get("groups") or ()],
         }
@@ -65,29 +65,41 @@ class WeebdexChapterExtractor(WeebdexBase, ChapterExtractor):
         data = self.data
         base = f"{data['node']}/data/{data['id']}/"
 
+        if self.config("data-saver", False):
+            pages = data["data_optimized"]
+            original = False
+        else:
+            pages = data["data"]
+            original = True
+
         return [
             (base + page["name"], {
                 "width" : page["dimensions"][0],
                 "height": page["dimensions"][1],
+                "original": original,
             })
-            for page in data["data"]
+            for page in pages
         ]
 
 
 class WeebdexMangaExtractor(WeebdexBase, MangaExtractor):
     """Extractor for weebdex manga"""
     chapterclass = WeebdexChapterExtractor
-    pattern = BASE_PATTERN + r"/title/(\w+)"
+    reverse = False
+    pattern = BASE_PATTERN + r"/title/(\w+)(?:/[^/?#]+/?\?([^#]+))?"
     example = "https://weebdex.org/title/ID/SLUG"
 
     def chapters(self, page):
-        mid = self.groups[0]
-        url = f"{self.root_api}/manga/{mid}/chapters"
-        params = {
-            "limit": 100,
-            "order": "asc" if self.config("chapter-reverse") else "desc",
-        }
+        mid, qs = self.groups
 
+        params = text.parse_query(qs)
+        params.setdefault("limit", 100)
+        if "tlang" not in params:
+            params["tlang"] = self.config("lang", "en")
+        if "order" not in params:
+            params["order"] = ("desc" if self.config("chapter-reverse") else
+                               "asc")
+        url = f"{self.root_api}/manga/{mid}/chapters"
         base = self.root + "/chapter/"
         manga = _manga_info(self, mid)
         results = []
@@ -98,7 +110,7 @@ class WeebdexMangaExtractor(WeebdexBase, MangaExtractor):
 
             for ch in data["data"]:
                 chapter, sep, minor = ch["chapter"].partition(".")
-                ch["volume"] = text.parse_int(ch["volume"])
+                ch["volume"] = text.parse_int(ch.get("volume"))
                 ch["chapter"] = text.parse_int(chapter)
                 ch["chapter_minor"] = sep + minor
                 ch.update(manga)
@@ -118,15 +130,16 @@ def _manga_info(self, mid):
     rel = manga["relationships"]
 
     return {
-        "manga"   : manga["title"],
-        "manga_id": manga["id"],
-        "manga_date": self.parse_datetime_iso(manga["created_at"]),
-        "year"    : manga["year"],
-        "status"  : manga["status"],
-        "origin"  : manga["language"],
-        "description": manga["description"],
-        "demographic": manga["demographic"],
-        "tags"    : [f"{t['group']}:{t['name']}" for t in rel["tags"]],
-        "author"  : [a["name"] for a in rel["authors"]],
-        "artist"  : [a["name"] for a in rel["artists"]],
+        "manga"   : manga.get("title"),
+        "manga_id": manga.get("id"),
+        "manga_date": self.parse_datetime_iso(manga.get("created_at")),
+        "year"    : manga.get("year"),
+        "status"  : manga.get("status"),
+        "origin"  : manga.get("language"),
+        "description": manga.get("description"),
+        "demographic": manga.get("demographic"),
+        "tags"    : [f"{t['group']}:{t['name']}"
+                     for t in rel.get("tags") or ()],
+        "author"  : [a["name"] for a in rel.get("authors") or ()],
+        "artist"  : [a["name"] for a in rel.get("artists") or ()],
     }

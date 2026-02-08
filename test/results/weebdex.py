@@ -11,7 +11,7 @@ __tests__ = (
 {
     "#url"     : "https://weebdex.org/chapter/f6c0awnrba",
     "#class"   : weebdex.WeebdexChapterExtractor,
-    "#pattern" : r"https://s\d+\.notdelta\.xyz/data/f6c0awnrba/\d+-\w{64}\.png",
+    "#pattern" : r"https://s\d+\.weebdex\.net/data/f6c0awnrba/\d+-\w{64}\.png",
     "#count"   : 14,
 
     "artist"       : ["Nokomi (のこみ)"],
@@ -66,7 +66,7 @@ ___
 {
     "#url"     : "https://weebdex.org/chapter/itizot1rxc",
     "#class"   : weebdex.WeebdexChapterExtractor,
-    "#pattern" : r"https://s\d+\.notdelta\.xyz/data/itizot1rxc/\d+\-\w+\.jpg",
+    "#pattern" : r"https://s\d+\.weebdex\.net/data/itizot1rxc/\d+\-\w+\.jpg",
     "#count"   : 17,
 
     "artist"       : ["Matsuda Minoru"],
@@ -83,16 +83,78 @@ ___
     "manga_id"     : "3o0icxno26",
     "origin"       : "ja",
     "title"        : "Cuộc hẹn tại phía Đông vườn địa đàng",
-    "uploader"     : "sMrBjZf",
+    "uploader"     : str,
     "version"      : 1,
     "volume"       : 2,
     "year"         : 2021,
 },
 
 {
+    "#url"     : "https://weebdex.org/chapter/itizot1rxc",
+    "#comment" : "'data-saver' option (#8914)",
+    "#class"   : weebdex.WeebdexChapterExtractor,
+    "#options" : {"data-saver": True},
+    "#range"   : "1-3",
+    "#results" : (
+        "https://s11.weebdex.net/data/itizot1rxc/1-fa838df3d9b2d16ab3f900a5d74d8e1fe2b15446825978209053297b8e3f7d0d.webp",
+        "https://s11.weebdex.net/data/itizot1rxc/2-b4914436ab21e7915440024a5b5bd705c3a844df314c3c7d722388b3ce81626a.webp",
+        "https://s11.weebdex.net/data/itizot1rxc/3-6b0e1901cfae7d6d5c21769d714c992fb1fa1af6e9e8e10083ea5a6bf5d53cef.webp",
+    ),
+},
+
+{
+    "#url"     : "https://weebdex.org/chapter/spsn025m8a",
+    "#comment" : "no 'demographic' data (#8939)",
+    "#class"   : weebdex.WeebdexChapterExtractor,
+    "#count"   : 49,
+
+    "artist"       : ["Fuugetsu Makoto"],
+    "author"       : ["Koyagi Mei"],
+    "chapter"      : 1,
+    "chapter_id"   : "spsn025m8a",
+    "chapter_minor": "",
+    "count"        : 49,
+    "date"         : "dt:2026-01-19 11:12:36",
+    "demographic"  : None,
+    "group"        : ["Asmodeus Scans"],
+    "lang"         : "en",
+    "manga"        : "Yuusha no Sensei, Saikyou no Kuzu ni naru. ~S-kyuu Party no Moto Eiyuu, Ura Shakai no Ihou Guild de Nariagari~",
+    "manga_date"   : "dt:2025-10-09 09:21:18",
+    "manga_id"     : "vtyi8syfjd",
+    "origin"       : "ja",
+    "original"     : True,
+    "title"        : "",
+    "uploader"     : "asmodai",
+    "version"      : 1,
+    "volume"       : 1,
+    "year"         : 2023,
+},
+
+{
+    "#url"     : "https://weebdex.org/chapter/0fignihbv8",
+    "#comment" : "no 'volume' data",
+    "#class"   : weebdex.WeebdexChapterExtractor,
+    "#count"   : 47,
+
+    "artist"       : ["Azuma Kiyohiko"],
+    "author"       : ["Azuma Kiyohiko"],
+    "chapter"      : 114,
+    "chapter_id"   : "0fignihbv8",
+    "chapter_minor": "",
+    "count"        : 47,
+    "date"         : "dt:2025-10-17 23:36:27",
+    "demographic"  : "shounen",
+    "group"        : ["Ralen"],
+    "lang"         : "en",
+    "manga"        : "Yotsuba to!",
+    "volume"       : 0,
+},
+
+{
     "#url"     : "https://weebdex.org/title/3o0icxno26/ani-datta-mono",
     "#class"   : weebdex.WeebdexMangaExtractor,
     "#pattern" : weebdex.WeebdexChapterExtractor.pattern,
+    "#options" : {"lang": None},
     "#count"   : range(120, 300),
 
     "artist"       : ["Matsuda Minoru"],
@@ -111,7 +173,7 @@ ___
     "manga_id"     : "3o0icxno26",
     "origin"       : "ja",
     "status"       : "ongoing",
-    "version"      : {1, 2},
+    "version"      : {1, 2, 3, 4},
     "year"         : 2021,
     "description"  : """\
 My brother died. When I went to visit my brother's grave with my brother's lover——……
@@ -131,6 +193,91 @@ ___
         "theme:Ghosts",
         "theme:Supernatural",
     ],
+},
+
+{
+    "#url"     : "https://weebdex.org/title/f29vfu3dd4/yotsuba-to",
+    "#comment" : "no 'volume' data (#8954)",
+    "#class"   : weebdex.WeebdexMangaExtractor,
+    "#pattern" : weebdex.WeebdexChapterExtractor.pattern,
+
+    "artist"     : ["Azuma Kiyohiko"],
+    "author"     : ["Azuma Kiyohiko"],
+    "demographic": "shounen",
+    "manga"      : "Yotsuba to!",
+    "manga_date" : "dt:2025-10-09 09:34:27",
+    "manga_id"   : "f29vfu3dd4",
+    "origin"     : "ja",
+    "volume"     : int,
+    "year"       : 2003,
+},
+
+{
+    "#url"     : "https://weebdex.org/title/3o0icxno26/ani-datta-mono",
+    "#comment" : "'lang' option (#8957)",
+    "#class"   : weebdex.WeebdexMangaExtractor,
+    "#pattern" : weebdex.WeebdexChapterExtractor.pattern,
+    "#options" : {"lang": "vi"},
+    "#count"   : 105,
+
+    "artist"       : ["Matsuda Minoru"],
+    "author"       : ["Matsuda Minoru"],
+    "chapter"      : range(1, 105),
+    "chapter_minor": {"", ".5"},
+    "demographic"  : "seinen",
+    "description"  : str,
+    "language"     : "vi",
+    "manga"        : "Ani Datta Mono",
+    "manga_date"   : "dt:2025-10-09 19:02:04",
+    "manga_id"     : "3o0icxno26",
+    "origin"       : "ja",
+    "status"       : "ongoing",
+    "version"      : int,
+    "volume"       : int,
+    "year"         : 2021,
+    "tags"         : [
+        "genre:Drama",
+        "genre:Horror",
+        "genre:Psychological",
+        "genre:Romance",
+        "genre:Thriller",
+        "theme:Ghosts",
+        "theme:Supernatural",
+    ],
+    "relationships": {
+        "groups"  : [{
+            "id"  : "u7kmeka8v6",
+            "name": "BBB Translation (Big Beaming Bluewhale)",
+        }],
+    },
+},
+
+{
+    "#url"     : "https://weebdex.org/title/3o0icxno26/ani-datta-mono?group=j0fsj3oem3&order=asc",
+    "#comment" : "query parameters (#8957)",
+    "#class"   : weebdex.WeebdexMangaExtractor,
+    "#range"   : "1-3",
+    "#results" : (
+        "https://weebdex.org/chapter/xv2cm9bj1a",
+        "https://weebdex.org/chapter/etoaxmxgcq",
+        "https://weebdex.org/chapter/24ew0mo562",
+    ),
+
+    "artist"       : ["Matsuda Minoru"],
+    "author"       : ["Matsuda Minoru"],
+    "chapter"      : range(1, 3),
+    "language"     : "en",
+    "manga"        : "Ani Datta Mono",
+    "manga_date"   : "dt:2025-10-09 19:02:04",
+    "manga_id"     : "3o0icxno26",
+    "version"      : 1,
+    "volume"       : 1,
+    "relationships": {
+        "groups"  : [{
+            "id"  : "j0fsj3oem3",
+            "name": "Rainbow D Translations",
+        }],
+    },
 },
 
 )

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2017-2025 Mike Fährmann
+# Copyright 2017-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -179,7 +179,8 @@ class PrintAction(argparse.Action):
             event = event.strip().lower()
             if event not in {"init", "file", "after", "skip", "error",
                              "prepare", "prepare-after", "post", "post-after",
-                             "finalize", "finalize-success", "finalize-error"}:
+                             "finalize", "finalize-success", "finalize-error",
+                             "child", "child-after"}:
                 format_string = value
                 event = ("prepare",)
 
@@ -234,6 +235,7 @@ def _parse_option(opt):
 
 def build_parser():
     """Build and configure an ArgumentParser object"""
+    SUPPRESS = argparse.SUPPRESS
     parser = argparse.ArgumentParser(
         formatter_class=Formatter,
         add_help=False,
@@ -267,14 +269,22 @@ def build_parser():
         help="Exact location for file downloads",
     )
     general.add_argument(
+        "--restrict-filenames",
+        dest="path-restrict", metavar="VALUE", action=ConfigAction,
+        help=("Replace restricted filename characters with underscores. "
+              "One of 'windows', 'unix', 'ascii', 'ascii+', "
+              "or a custom set of characters"),
+    )
+    general.add_argument(
+        "--windows-filenames",
+        dest="path-restrict", nargs=0, action=ConfigConstAction,
+        const="windows",
+        help="Force filenames to be Windows-compatible",
+    )
+    general.add_argument(
         "-X", "--extractors",
         dest="extractor_sources", metavar="PATH", action="append",
         help="Load external extractors from PATH",
-    )
-    general.add_argument(
-        "-a", "--user-agent",
-        dest="user-agent", metavar="UA", action=ConfigAction,
-        help="User-Agent request header",
     )
     general.add_argument(
         "--clear-cache",
@@ -317,7 +327,7 @@ def build_parser():
     input.add_argument(
         "urls",
         metavar="URL", nargs="*",
-        help=argparse.SUPPRESS,
+        help=SUPPRESS,
     )
     input.add_argument(
         "-i", "--input-file",
@@ -479,6 +489,11 @@ def build_parser():
               "or -1 for infinite retries (default: 4)"),
     )
     networking.add_argument(
+        "-a", "--user-agent",
+        dest="user-agent", metavar="UA", action=ConfigAction,
+        help="User-Agent request header",
+    )
+    networking.add_argument(
         "--http-timeout",
         dest="timeout", metavar="SECONDS", type=float, action=ConfigAction,
         help="Timeout for HTTP connections (default: 30.0)",
@@ -487,6 +502,13 @@ def build_parser():
         "--proxy",
         dest="proxy", metavar="URL", action=ConfigAction,
         help="Use the specified proxy",
+    )
+    networking.add_argument(
+        "--xff",
+        dest="geo-bypass", metavar="VALUE", action=ConfigAction,
+        help=("Use a fake 'X-Forwarded-For' HTTP header to try bypassing "
+              "geographic restrictions. Can be IP blocks in CIDR notation "
+              "or two-letter ISO 3166-2 country codes (12.0.0.0/8,FR,CN)")
     )
     networking.add_argument(
         "--source-address",
@@ -612,6 +634,12 @@ def build_parser():
         help="Open configuration file in external application",
     )
     configuration.add_argument(
+        "--config-type",
+        dest="config_type", metavar="TYPE",
+        help=("Set filetype of default configuration files "
+              "(json, yaml, toml)"),
+    )
+    configuration.add_argument(
         "--config-ignore",
         dest="config_load", action="store_false",
         help="Do not read default configuration files",
@@ -619,7 +647,7 @@ def build_parser():
     configuration.add_argument(
         "--ignore-config",
         dest="config_load", action="store_false",
-        help=argparse.SUPPRESS,
+        help=SUPPRESS,
     )
 
     authentication = parser.add_argument_group("Authentication Options")
@@ -697,7 +725,7 @@ def build_parser():
     )
     selection.add_argument(
         "--range",
-        dest="image-range", metavar="RANGE", action=ConfigAction,
+        dest="file-range", metavar="RANGE", action=ConfigAction,
         help=("Index range(s) specifying which files to download. "
               "These can be either a constant value, range, or slice "
               "(e.g. '5', '8-20', or '1:24:3')"),
@@ -708,14 +736,14 @@ def build_parser():
         help=("Like '--range', but for posts"),
     )
     selection.add_argument(
-        "--chapter-range",
-        dest="chapter-range", metavar="RANGE", action=ConfigAction,
+        "--child-range",
+        dest="child-range", metavar="RANGE", action=ConfigAction,
         help=("Like '--range', but for child extractors handling "
               "manga chapters, external URLs, etc."),
     )
     selection.add_argument(
         "--filter",
-        dest="image-filter", metavar="EXPR", action=ConfigAction,
+        dest="file-filter", metavar="EXPR", action=ConfigAction,
         help=("Python expression controlling which files to download. "
               "Files for which the expression evaluates to False are ignored. "
               "Available keys are the filename-specific ones listed by '-K'. "
@@ -728,11 +756,23 @@ def build_parser():
         help=("Like '--filter', but for posts"),
     )
     selection.add_argument(
-        "--chapter-filter",
-        dest="chapter-filter", metavar="EXPR", action=ConfigAction,
+        "--child-filter",
+        dest="child-filter", metavar="EXPR", action=ConfigAction,
         help=("Like '--filter', but for child extractors handling "
               "manga chapters, external URLs, etc."),
     )
+    selection.add_argument(
+        "--file-range", "--image-range",
+        dest="file-range", action=ConfigAction, help=SUPPRESS)
+    selection.add_argument(
+        "--chapter-range",
+        dest="child-range", action=ConfigAction, help=SUPPRESS)
+    selection.add_argument(
+        "--file-filter", "--image-filter",
+        dest="file-filter", action=ConfigAction, help=SUPPRESS)
+    selection.add_argument(
+        "--chapter-filter",
+        dest="child-filter", action=ConfigAction, help=SUPPRESS)
 
     infojson = {
         "name"    : "metadata",
@@ -772,7 +812,7 @@ def build_parser():
         "--write-infojson",
         dest="postprocessors",
         action="append_const", const=infojson,
-        help=argparse.SUPPRESS,
+        help=SUPPRESS,
     )
     postprocessor.add_argument(
         "--write-tags",
@@ -805,7 +845,7 @@ def build_parser():
         "--mtime-from-date",
         dest="postprocessors", nargs=0, action=MtimeAction,
         const="date|status[date]",
-        help=argparse.SUPPRESS,
+        help=SUPPRESS,
     )
     postprocessor.add_argument(
         "--rename",
@@ -829,18 +869,18 @@ def build_parser():
     postprocessor.add_argument(
         "--ugoira-conv",
         dest="postprocessors", nargs=0, action=UgoiraAction, const="vp8",
-        help=argparse.SUPPRESS,
+        help=SUPPRESS,
     )
     postprocessor.add_argument(
         "--ugoira-conv-lossless",
         dest="postprocessors", nargs=0, action=UgoiraAction,
         const="vp9-lossless",
-        help=argparse.SUPPRESS,
+        help=SUPPRESS,
     )
     postprocessor.add_argument(
         "--ugoira-conv-copy",
         dest="postprocessors", nargs=0, action=UgoiraAction, const="copy",
-        help=argparse.SUPPRESS,
+        help=SUPPRESS,
     )
     postprocessor.add_argument(
         "--exec",

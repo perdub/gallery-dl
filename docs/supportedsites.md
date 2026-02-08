@@ -127,12 +127,6 @@ Consider all listed sites to potentially be NSFW.
     <td>Audios, Collections, Search Results, User Profiles</td>
     <td></td>
 </tr>
-<tr id="batoto" title="batoto">
-    <td>BATO.TO</td>
-    <td>https://bato.to/</td>
-    <td>Chapters, Manga</td>
-    <td></td>
-</tr>
 <tr id="bbc" title="bbc">
     <td>BBC</td>
     <td>https://bbc.co.uk/</td>
@@ -172,7 +166,7 @@ Consider all listed sites to potentially be NSFW.
 <tr id="booth" title="booth">
     <td>BOOTH</td>
     <td>https://booth.pm/</td>
-    <td>Items, Shops</td>
+    <td>Item Categories, Items, Shops</td>
     <td></td>
 </tr>
 <tr id="bunkr" title="bunkr">
@@ -274,7 +268,7 @@ Consider all listed sites to potentially be NSFW.
 <tr id="discord" title="discord">
     <td>Discord</td>
     <td>https://discord.com/</td>
-    <td>Channels, DMs, Messages, Servers, Server Assets</td>
+    <td>Channels, DMs, Messages, Servers, Server Assets, Server Searches</td>
     <td></td>
 </tr>
 <tr id="dynastyscans" title="dynastyscans">
@@ -352,7 +346,7 @@ Consider all listed sites to potentially be NSFW.
 <tr id="fikfap" title="fikfap">
     <td>FikFap</td>
     <td>https://fikfap.com/</td>
-    <td>Posts, User Profiles</td>
+    <td>Hashtags, Posts, User Profiles</td>
     <td></td>
 </tr>
 <tr id="fitnakedgirls" title="fitnakedgirls">
@@ -565,6 +559,12 @@ Consider all listed sites to potentially be NSFW.
     <td>Favorites, Followers, Followed Users, individual Images, Playlists, Search Results, Tag Searches, User Profiles, User Images, User Playlists, User Videos, Videos</td>
     <td>Supported</td>
 </tr>
+<tr id="kaliscan" title="kaliscan">
+    <td>KaliScan</td>
+    <td>https://kaliscan.me/</td>
+    <td>Chapters, Manga</td>
+    <td></td>
+</tr>
 <tr id="keenspot" title="keenspot">
     <td>Keenspot</td>
     <td>http://www.keenspot.com/</td>
@@ -619,6 +619,12 @@ Consider all listed sites to potentially be NSFW.
     <td>Galleries</td>
     <td></td>
 </tr>
+<tr id="listal" title="listal">
+    <td>Listal</td>
+    <td>https://listal.com</td>
+    <td>individual Images, People</td>
+    <td></td>
+</tr>
 <tr id="livedoor" title="livedoor">
     <td>livedoor Blog</td>
     <td>http://blog.livedoor.jp/</td>
@@ -667,6 +673,12 @@ Consider all listed sites to potentially be NSFW.
     <td>Chapters, Manga</td>
     <td></td>
 </tr>
+<tr id="mangafreak" title="mangafreak">
+    <td>MangaFreak</td>
+    <td>https://ww2.mangafreak.me/</td>
+    <td>Chapters, Manga</td>
+    <td></td>
+</tr>
 <tr id="mangapark" title="mangapark">
     <td>MangaPark</td>
     <td>https://mangapark.net/</td>
@@ -688,6 +700,12 @@ Consider all listed sites to potentially be NSFW.
 <tr id="mangataro" title="mangataro">
     <td>MangaTaro</td>
     <td>https://mangataro.org/</td>
+    <td>Chapters, Manga</td>
+    <td></td>
+</tr>
+<tr id="mangatown" title="mangatown">
+    <td>MangaTown</td>
+    <td>https://www.mangatown.com/</td>
     <td>Chapters, Manga</td>
     <td></td>
 </tr>
@@ -949,12 +967,6 @@ Consider all listed sites to potentially be NSFW.
     <td>Posts, Search Results, User Profiles</td>
     <td></td>
 </tr>
-<tr id="saint" title="saint">
-    <td>Saint</td>
-    <td>https://saint2.su/</td>
-    <td>Albums, Media Files</td>
-    <td></td>
-</tr>
 <tr id="sankaku" title="sankaku">
     <td>Sankaku Channel</td>
     <td>https://sankaku.app/</td>
@@ -976,7 +988,7 @@ Consider all listed sites to potentially be NSFW.
 <tr id="scrolller" title="scrolller">
     <td>Scrolller</td>
     <td>https://scrolller.com/</td>
-    <td>Followed Subreddits, Posts, Subreddits</td>
+    <td>Followed Subreddits, Posts, Subreddits, Reddit Users</td>
     <td>Supported</td>
 </tr>
 <tr id="senmanga" title="senmanga">
@@ -1087,6 +1099,12 @@ Consider all listed sites to potentially be NSFW.
     <td>Posts, Tag Searches</td>
     <td></td>
 </tr>
+<tr id="thefap" title="thefap">
+    <td>TheFap</td>
+    <td>https://thefap.net/</td>
+    <td>Models, Posts</td>
+    <td></td>
+</tr>
 <tr id="tiktok" title="tiktok">
     <td>TikTok</td>
     <td>https://www.tiktok.com/</td>
@@ -1105,12 +1123,6 @@ Consider all listed sites to potentially be NSFW.
     <td>Art, individual Images</td>
     <td></td>
 </tr>
-<tr id="tsumino" title="tsumino">
-    <td>Tsumino</td>
-    <td>https://www.tsumino.com/</td>
-    <td>Galleries, Search Results</td>
-    <td>Supported</td>
-</tr>
 <tr id="tumblr" title="tumblr">
     <td>Tumblr</td>
     <td>https://www.tumblr.com/</td>
@@ -1127,6 +1139,12 @@ Consider all listed sites to potentially be NSFW.
     <td>Tungsten</td>
     <td>https://tungsten.run/</td>
     <td>Models, Posts, User Profiles</td>
+    <td></td>
+</tr>
+<tr id="turbo" title="turbo">
+    <td>turbo.cr</td>
+    <td>https://turbo.cr/</td>
+    <td>Albums, Media Files</td>
     <td></td>
 </tr>
 <tr id="twibooru" title="twibooru">
@@ -1651,9 +1669,33 @@ Consider all listed sites to potentially be NSFW.
 <tr id="nitter" title="nitter">
     <td colspan="4"><strong>Nitter Instances</strong></td>
 </tr>
-<tr id="" title="">
+<tr id="nitter.net" title="nitter.net">
+    <td>Nitter.net</td>
+    <td>https://nitter.net/</td>
+    <td>Media Files, Replies, Search Results, Tweets</td>
     <td></td>
+</tr>
+<tr id="nitter.space" title="nitter.space">
+    <td>Nitter.space</td>
+    <td>https://nitter.space/</td>
+    <td>Media Files, Replies, Search Results, Tweets</td>
     <td></td>
+</tr>
+<tr id="nitter.tiekoetter" title="nitter.tiekoetter">
+    <td>Nitter.tiekoetter</td>
+    <td>https://nitter.tiekoetter/</td>
+    <td>Media Files, Replies, Search Results, Tweets</td>
+    <td></td>
+</tr>
+<tr id="xcancel" title="xcancel">
+    <td>Xcancel</td>
+    <td>https://xcancel.com/</td>
+    <td>Media Files, Replies, Search Results, Tweets</td>
+    <td></td>
+</tr>
+<tr id="lightbrd" title="lightbrd">
+    <td>Lightbrd</td>
+    <td>https://lightbrd.com/</td>
     <td>Media Files, Replies, Search Results, Tweets</td>
     <td></td>
 </tr>
@@ -1888,19 +1930,37 @@ Consider all listed sites to potentially be NSFW.
 <tr id="simpcity" title="simpcity">
     <td>SimpCity Forums</td>
     <td>https://simpcity.cr/</td>
-    <td>Forums, Posts, Threads</td>
+    <td>Forums, Albums, Media Categories, Media Files, User Media, Posts, Threads</td>
     <td>Supported</td>
 </tr>
 <tr id="nudostarforum" title="nudostarforum">
     <td>NudoStar Forums</td>
     <td>https://nudostar.com/forum/</td>
-    <td>Forums, Posts, Threads</td>
+    <td>Forums, Albums, Media Categories, Media Files, User Media, Posts, Threads</td>
     <td>Supported</td>
 </tr>
 <tr id="atfforum" title="atfforum">
     <td>All The Fallen</td>
     <td>https://allthefallen.moe/forum/</td>
-    <td>Forums, Posts, Threads</td>
+    <td>Forums, Albums, Media Categories, Media Files, User Media, Posts, Threads</td>
+    <td></td>
+</tr>
+<tr id="celebforum" title="celebforum">
+    <td>celebforum</td>
+    <td>https://celebforum.to/</td>
+    <td>Forums, Albums, Media Categories, Media Files, User Media, Posts, Threads</td>
+    <td></td>
+</tr>
+<tr id="titsintops" title="titsintops">
+    <td>Tits In Tops Forum</td>
+    <td>https://titsintops.com/phpBB2/</td>
+    <td>Forums, Albums, Media Categories, Media Files, User Media, Posts, Threads</td>
+    <td></td>
+</tr>
+<tr id="socialmediagirlsforum" title="socialmediagirlsforum">
+    <td>Social Media Girls Forums</td>
+    <td>https://forums.socialmediagirls.com/</td>
+    <td>Forums, Albums, Media Categories, Media Files, User Media, Posts, Threads</td>
     <td></td>
 </tr>
 

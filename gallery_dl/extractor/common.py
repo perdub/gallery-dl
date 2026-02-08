@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2014-2025 Mike Fährmann
+# Copyright 2014-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -39,17 +39,21 @@ class Extractor():
     archive_fmt = ""
     status = 0
     root = ""
-    cookies_domain = ""
+    cookies_file = ""
     cookies_index = 0
+    cookies_domain = ""
+    session = None
     referer = True
     ciphers = None
     tls12 = True
     browser = None
     useragent = util.USERAGENT_FIREFOX
+    geobypass = None
     request_interval = 0.0
     request_interval_min = 0.0
     request_interval_429 = 60.0
     request_timestamp = 0.0
+    finalize = skip = None
 
     def __init__(self, match):
         self.log = logging.getLogger(self.category)
@@ -72,6 +76,9 @@ class Extractor():
         self._cfgpath = ("extractor", self.category, self.subcategory)
         self._parentdir = ""
 
+    def __str__(self):
+        return f"{self.__class__.__name__} <{self.url}>"
+
     @classmethod
     def from_url(cls, url):
         if isinstance(cls.pattern, str):
@@ -85,20 +92,21 @@ class Extractor():
 
     def initialize(self):
         self._init_options()
-        self._init_session()
-        self._init_cookies()
+
+        if self.session is None:
+            self._init_session()
+            self.cookies = self.session.cookies
+            if self.cookies_domain is not None:
+                self._init_cookies()
+        else:
+            self.cookies = self.session.cookies
+
         self._init()
         self.initialize = util.noop
-
-    def finalize(self):
-        pass
 
     def items(self):
         return
         yield
-
-    def skip(self, num):
-        return 0
 
     def config(self, key, default=None):
         return config.interpolate(self._cfgpath, key, default)
@@ -216,7 +224,9 @@ class Extractor():
                     if encoding:
                         response.encoding = encoding
                     return response
-                if notfound and code == 404:
+                if notfound is not None and code == 404:
+                    if notfound is True:
+                        notfound = self.__class__.subcategory
                     self.status |= exception.NotFoundError.code
                     raise exception.NotFoundError(notfound)
 
@@ -342,6 +352,17 @@ class Extractor():
         self.log.debug("Sleeping %.2f seconds (%s)",
                        seconds, reason)
         time.sleep(seconds)
+
+    def utils(self, module="", name=None):
+        module = (self.__class__.category if not module else
+                  module[1:] if module[0] == "/" else
+                  f"{self.__class__.category}_{module}")
+        if module in CACHE_UTILS:
+            res = CACHE_UTILS[module]
+        else:
+            res = CACHE_UTILS[module] = __import__(
+                "utils." + module, globals(), None, module, 1)
+        return res if name is None else getattr(res, name, None)
 
     def input(self, prompt, echo=True):
         self._check_input_allowed(prompt)
@@ -483,12 +504,25 @@ class Extractor():
                 headers["User-Agent"] = util.USERAGENT_CHROME
             elif custom_ua in {"gallery-dl", "gallerydl", "gdl"}:
                 headers["User-Agent"] = util.USERAGENT_GALLERYDL
+            elif custom_ua in {"google-bot", "googlebot", "bot"}:
+                headers["User-Agent"] = "Googlebot-Image/1.0"
             else:
                 self.log.warning(
                     "Unsupported User-Agent preset '%s'", custom_ua)
         elif self.useragent is Extractor.useragent and not self.browser or \
                 custom_ua is not config.get(("extractor",), "user-agent"):
             headers["User-Agent"] = custom_ua
+
+        custom_xff = self.config("geo-bypass")
+        if custom_xff is None or custom_xff == "auto":
+            custom_xff = self.geobypass
+        if custom_xff is not None:
+            if ip := self.utils("/geo").random_ipv4(custom_xff):
+                headers["X-Forwarded-For"] = ip
+                self.log.debug("Using fake IP %s as 'X-Forwarded-For'", ip)
+            else:
+                self.log.warning("xff: Invalid ISO 3166 country code '%s'",
+                                 custom_xff)
 
         if custom_headers := self.config("headers"):
             if isinstance(custom_headers, str):
@@ -537,11 +571,6 @@ class Extractor():
 
     def _init_cookies(self):
         """Populate the session's cookiejar"""
-        self.cookies = self.session.cookies
-        self.cookies_file = None
-        if self.cookies_domain is None:
-            return
-
         if cookies := self.config("cookies"):
             if select := self.config("cookies-select"):
                 if select == "rotate":
@@ -923,8 +952,11 @@ class Dispatch():
         }
 
         if alt is not None:
-            for sub, sub_alt in alt:
-                extractors[sub_alt] = extractors[sub]
+            for sub, sub_alt, url in alt:
+                if url is None:
+                    extractors[sub_alt] = extractors[sub]
+                else:
+                    extractors[sub_alt] = (extractors[sub][0], url)
 
         include = self.config("include", default) or ()
         if include == "all":
@@ -1017,10 +1049,8 @@ class BaseExtractor(Extractor):
                 pattern = re.escape(root[root.index(":") + 3:])
             pattern_list.append(pattern + "()")
 
-        return (
-            r"(?:" + cls.basecategory + r":(https?://[^/?#]+)|"
-            r"(?:https?://)?(?:" + "|".join(pattern_list) + r"))"
-        )
+        return (f"(?:{cls.basecategory}:(https?://[^/?#]+)|"
+                f"(?:https?://)?(?:{'|'.join(pattern_list)}))")
 
 
 class RequestsAdapter(HTTPAdapter):
@@ -1119,6 +1149,7 @@ def _browser_useragent(browser):
 
 CACHE_ADAPTERS = {}
 CACHE_COOKIES = {}
+CACHE_UTILS = {}
 CATEGORY_MAP = ()
 
 

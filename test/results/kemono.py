@@ -5,7 +5,6 @@
 # published by the Free Software Foundation.
 
 from gallery_dl.extractor import kemono
-from gallery_dl import util, exception
 
 
 __tests__ = (
@@ -357,6 +356,8 @@ __tests__ = (
     "revision_index": {1, 2, 3},
     "revision_count": 3,
     "revision_hash" : {
+        "eb2fa4385af730509a42f8f0424bd0b9a0e4bc21",
+        "a44ad7fa57ebc2473e861c1d7f11de721c809549",
         "e0e93281495e151b11636c156e52bfe9234c2a40",
         "bc5713195e14799da40c525381216c5a1a340b0f",
         "9872bfb536a47cc69d95d2f195cd5c825808f089",
@@ -388,7 +389,7 @@ __tests__ = (
     "#comment" : "revisions (#4498)",
     "#category": ("", "kemono", "patreon"),
     "#class"   : kemono.KemonoPostExtractor,
-    "#exception": exception.NotFoundError,
+    "#exception": "NotFoundError",
 },
 
 {
@@ -537,7 +538,6 @@ __tests__ = (
     "#comment" : "user profile data unavailable (#8382)",
     "#category": ("", "kemono", "patreon"),
     "#class"   : kemono.KemonoPostExtractor,
-    "#log"     : "patreon/34792417/137409895: 'Creator not found'",
     "#results" : (
         "https://kemono.cr/data/a9/87/a9874d7e1229396b0b2706fd7fa9949eac924e86256d84d077c10ecbace8bd17.bin",
         "https://kemono.cr/data/a2/eb/a2eba02204086c789d59bc7112510aebf0428455ad1664153bfbb92eb8aa5643.jpg",
@@ -545,8 +545,8 @@ __tests__ = (
 
     "title"       : "Capella - Re:zero (20P)",
     "user"        : "34792417",
-    "user_profile": util.NONE,
-    "username"    : util.NONE,
+    "user_profile": dict,
+    "username"    : "Varas",
 },
 
 {
@@ -558,6 +558,33 @@ __tests__ = (
     "name"     : "https://www.patreon.com/media-u/Z0FBQUFBQmpfWFNLWHpRakFlYjVNeWpuTlRuRnJBdHY3VVA2UmRhVHFpOFBHMW9QZUdVOHQ3b2pXSV9XMkJlaHFuN2JyVk5VNDBqdV9lZVRLR2NkUXUwSjgwdndDQlk3VzBCUXI5TW5iejlVWVZaUmJoTktIX3B5aGVCS3dUQk11a2hxajd4TUx2MFN2UHpKa0pfOWZQeS1UeDlzNEhpbG9pRzJsZE54MG5OcnZDOUllTGhyY01rNjVRaGgyaVFycjFSUUFIaV92OU9wdktuVjlMeFJNLXhYejdDNWZTVXZEc2l0TVZCR1A0YXM3RVMzbmsxSjh2ND0=#190833153_",
     "filename" : "https://www.patreon.com/media-u/Z0FBQUFBQmpfWFNLWHpRakFlYjVNeWpuTlRuRnJBdHY3VVA2UmRhVHFpOFBHMW9QZUdVOHQ3b2pXSV9XMkJlaHFuN2JyVk5VNDBqdV9lZVRLR2NkUXUwSjgwdndDQlk3VzBCUXI5TW5iejlVWVZaUmJoTktIX3B5aGVCS3dUQk11a2hxajd4TUx2MFN2UHpKa0pfOWZQeS1UeDlzNEhpbG9pRzJsZE54MG5OcnZDOUllTGhyY01rNjVRaGgyaVFycjFSUUFIaV92OU9wdktuVjlMeFJNLXhYejdDNWZTVXZEc2l0TVZCR1A0YXM3RVMzbmsxSjh2ND0=#190833153_",
     "extension": "jpg",
+},
+
+{
+    "#url"     : "https://kemono.cr/patreon/user/17152737/post/126135488/revisions/11162541",
+    "#comment" : "'str' values instead of 'dict' for 'file' & 'attachments' (#8929)",
+    "#category": ("", "kemono", "patreon"),
+    "#class"   : kemono.KemonoPostExtractor,
+    "#results" : "https://kemono.cr/data/b3/4d/b34d2ad89a59efa3746643c657310043bbada32751138aab7d23523fd1a5b765.png",
+
+    "revision_hash" : "758c2fe1d223a5d49093002ad162cef7e4ce5bb8",
+    "revision_id"   : 11162541,
+    "revision_index": 14,
+    "attachments"   : [{
+        "extension": "png",
+        "filename" : "448451741",
+        "hash"     : "b34d2ad89a59efa3746643c657310043bbada32751138aab7d23523fd1a5b765",
+        "name"     : "448451741.png",
+        "path"     : "/b3/4d/b34d2ad89a59efa3746643c657310043bbada32751138aab7d23523fd1a5b765.png",
+        "type"     : "attachment",
+        "url"      : "https://kemono.cr/data/b3/4d/b34d2ad89a59efa3746643c657310043bbada32751138aab7d23523fd1a5b765.png",
+    }],
+    "file"          : {
+        "hash": "b34d2ad89a59efa3746643c657310043bbada32751138aab7d23523fd1a5b765",
+        "name": "448451741.png",
+        "path": "/b3/4d/b34d2ad89a59efa3746643c657310043bbada32751138aab7d23523fd1a5b765.png",
+        "type": "file",
+    },
 },
 
 {
@@ -675,11 +702,95 @@ __tests__ = (
 },
 
 {
+    "#url"     : "https://kemono.cr/discord/server/814339508694155294/815230464306446346",
+    "#comment" : "discord archives (#8898)",
+    "#class"   : kemono.KemonoDiscordExtractor,
+    "#options" : {
+        "archives"   : True,
+        "order-posts": "asc",
+    },
+    "#range"   : "1",
+    "#results" : "https://kemono.cr/data/ae/16/ae16db15cc15cc250db003964d6cd3cf2590863d925d96730871b6e75db3e69a.zip",
+
+    "added"        : "2021-10-24T09:11:03.268740",
+    "channel"      : "宝箱エリア",
+    "channel_id"   : "815230464306446346",
+    "channel_nsfw" : True,
+    "channel_topic": None,
+    "channel_type" : 0,
+    "content"      : "",
+    "count"        : 1,
+    "date"         : "dt:2021-02-28 03:17:21",
+    "edited"       : None,
+    "embeds"       : [],
+    "extension"    : "zip",
+    "filename"     : "Hachikuji_F",
+    "hash"         : "ae16db15cc15cc250db003964d6cd3cf2590863d925d96730871b6e75db3e69a",
+    "id"           : "815422363813675048",
+    "mentions"     : [],
+    "num"          : 1,
+    "parent_id"    : None,
+    "published"    : "2021-02-28T03:17:21.348000",
+    "revisions"    : [],
+    "seq"          : 1,
+    "server"       : "隠しエリア",
+    "server_id"    : "814339508694155294",
+    "type"         : "archive",
+    "archives"     : [{
+        "hash"     : "ae16db15cc15cc250db003964d6cd3cf2590863d925d96730871b6e75db3e69a",
+        "name"     : "Hachikuji_F.zip",
+        "password" : "894F",
+        "path"     : "/ae/16/ae16db15cc15cc250db003964d6cd3cf2590863d925d96730871b6e75db3e69a.zip",
+        "type"     : "attachment",
+        "file_list": [
+            "Hachikuji1.png",
+            "Hachikuji2.png",
+            "Hachikuji3.png",
+            "Hachikuji4.png",
+            "Hachikuji5.png",
+            "Hachikuji6.png",
+            "Hachikuji7.png",
+            "Hachikuji8.png",
+        ],
+        "file"     : {
+            "added": "2021-10-24T09:11:44.375913",
+            "ctime": "2021-10-24T09:11:44.318451",
+            "ext"  : ".zip",
+            "flags": "00000011",
+            "hash" : "ae16db15cc15cc250db003964d6cd3cf2590863d925d96730871b6e75db3e69a",
+            "id"   : 7886691,
+            "ihash": None,
+            "mime" : "application/zip",
+            "mtime": "2021-10-24T09:11:44.318451",
+            "size" : 12572064,
+        },
+    }],
+    "attachments"  : [{
+        "hash": "ae16db15cc15cc250db003964d6cd3cf2590863d925d96730871b6e75db3e69a",
+        "name": "Hachikuji_F.zip",
+        "path": "/ae/16/ae16db15cc15cc250db003964d6cd3cf2590863d925d96730871b6e75db3e69a.zip",
+        "type": "attachment",
+    }],
+    "author"       : {
+        "avatar"       : "336bbb6864275a8ca05c3de4ec5d5984",
+        "discriminator": "6362",
+        "id"           : "798533277852893218",
+        "public_flags" : 0,
+        "username"     : "影おじ",
+    },
+},
+
+{
     "#url"     : "https://kemono.cr/discord/server/488668827274444803",
     "#category": ("", "kemono", "discord-server"),
     "#class"   : kemono.KemonoDiscordServerExtractor,
     "#pattern" : kemono.KemonoDiscordExtractor.pattern,
-    "#count"   : 26,
+    "#count"   : 27,
+},
+
+{
+    "#url"     : "https://kemono.cr/discord/server/488668827274444803/",
+    "#class"   : kemono.KemonoDiscordServerExtractor,
 },
 
 {
@@ -760,23 +871,7 @@ __tests__ = (
     "#category": ("", "kemono", "artists"),
     "#class"   : kemono.KemonoArtistsExtractor,
     "#pattern" : kemono.KemonoUserExtractor.pattern,
-    "#results" : (
-        "https://kemono.cr/patreon/user/91205314",
-        "https://kemono.cr/patreon/user/51528107",
-        "https://kemono.cr/fanbox/user/12812028",
-        "https://kemono.cr/patreon/user/35237747",
-        "https://kemono.cr/patreon/user/8296916",
-        "https://kemono.cr/patreon/user/155095324",
-        "https://kemono.cr/patreon/user/75988930",
-        "https://kemono.cr/patreon/user/93703989",
-        "https://kemono.cr/patreon/user/100292687",
-        "https://kemono.cr/patreon/user/138609443",
-        "https://kemono.cr/patreon/user/61646879",
-        "https://kemono.cr/patreon/user/110669843",
-        "https://kemono.cr/patreon/user/44343773",
-        "https://kemono.cr/patreon/user/77920059",
-        "https://kemono.cr/patreon/user/102386631",
-    ),
+    "#count"   : range(15, 20),
 
     "favorited": int,
     "id"       : str,

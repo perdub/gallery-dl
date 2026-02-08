@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2014-2025 Mike Fährmann
+# Copyright 2014-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation.
 
+import os
 import sys
 import logging
 from . import version, config, option, output, extractor, job, util, exception
@@ -25,6 +26,11 @@ def main():
         log = output.initialize_logging(args.loglevel)
 
         # configuration
+        if args.config_type:
+            try:
+                config.default(args.config_type)
+            except Exception as exc:
+                config.log.error(exc)
         if args.config_load:
             config.load()
         if args.configs_json:
@@ -120,7 +126,10 @@ def main():
             elif filterenv.startswith("default"):
                 util.compile_expression = util.compile_expression_defaultdict
 
-        # format string separator
+        # format string options
+        if not config.get((), "format-operator-dot", True):
+            from . import formatter
+            formatter._attrgetter = formatter.operator.attrgetter
         if separator := config.get((), "format-separator"):
             from . import formatter
             formatter._SEPARATOR = separator
@@ -318,6 +327,7 @@ def main():
                     catmap = {
                         "coomer"       : "coomerparty",
                         "kemono"       : "kemonoparty",
+                        "turbo"        : "saint",
                         "schalenetwork": "koharu",
                         "naver-blog"   : "naver",
                         "naver-chzzk"  : "chzzk",
@@ -538,11 +548,14 @@ class InputManager():
 
     def _rewrite(self):
         url, path, action, indicies = self._item
+        path_tmp = path + ".tmp"
         lines = self.files[path]
         action(lines, indicies)
+
         try:
-            with open(path, "w", encoding="utf-8") as fp:
+            with open(path_tmp, "w", encoding="utf-8") as fp:
                 fp.writelines(lines)
+            os.replace(path_tmp, path)
         except Exception as exc:
             self.log.warning(
                 "Unable to update '%s' (%s: %s)",

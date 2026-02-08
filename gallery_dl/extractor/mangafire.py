@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2025 Mike Fährmann
+# Copyright 2025-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -52,8 +52,10 @@ class MangafireChapterExtractor(MangafireBase, ChapterExtractor):
 
     def images(self, page):
         url = f"{self.root}/ajax/read/{self.type}/{self.chapter_id}"
+        params = {"vrf": self.utils("vrf").generate(
+            f"{self.type}@{self.chapter_id}")}
         headers = {"x-requested-with": "XMLHttpRequest"}
-        data = self.request_json(url, headers=headers)
+        data = self.request_json(url, params=params, headers=headers)
 
         return [
             (image[0], None)
@@ -129,8 +131,9 @@ def _manga_info(self, manga_path, page=None):
 def _manga_chapters(self, manga_info):
     manga_id, type, lang = manga_info
     url = f"{self.root}/ajax/read/{manga_id}/{type}/{lang}"
+    params = {"vrf": self.utils("vrf").generate(f"{manga_id}@{type}@{lang}")}
     headers = {"x-requested-with": "XMLHttpRequest"}
-    data = self.request_json(url, headers=headers)
+    data = self.request_json(url, params=params, headers=headers)
 
     needle = f"{manga_id}/{lang}/"
     return {

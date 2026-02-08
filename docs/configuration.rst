@@ -212,29 +212,64 @@ Description
     Specifying a default |Path|_ with ``""`` is required.
 
 
+extractor.*.follow
+------------------
+Type
+    `Format String`_
+Default
+    ``null``
+Example
+    * ``"{content}"``
+    * ``"\fE body or html or text"``
+Description
+    Follow URLs in the given `Format String`_'s result and
+    process them with child extractors.
+
+
+extractor.*.parent
+------------------
+Type
+    ``bool``
+Default
+    ``true``
+        ``[chevereto]`` |
+        ``erome``       |
+        ``[imagehost]``
+    ``false``
+        otherwise
+Description
+    Mark an extractor as a `parent` and enable
+
+    * `parent-directory <extractor.*.parent-directory_>`__
+    * `parent-metadata  <extractor.*.parent-metadata_>`__
+    * `parent-session   <extractor.*.parent-session_>`__
+    * `parent-skip      <extractor.*.parent-skip_>`__
+
+    for it by default.
+
+
 extractor.*.parent-directory
 ----------------------------
 Type
     ``bool``
 Default
-    ``false``
+    `extractor.parent <extractor.*.parent_>`__
 Description
     Use an extractor's current target directory as
     base-directory_ for any spawned child extractors.
 
 
+.. _extractor.*.metadata-parent:
+
 extractor.*.parent-metadata
----------------------------
-extractor.*.metadata-parent
 ---------------------------
 Type
     * ``bool``
     * ``string``
 Default
     ``true``
-        ``[chevereto]`` |
-        ``[imagehost]``
-    ``false``
+        `extractor.parent <extractor.*.parent_>`__
+    ``"_parent"``
         otherwise
 Description
     Forward a parent's metadata to its child extractors.
@@ -251,12 +286,27 @@ Description
         }
 
 
+extractor.*.parent-session
+--------------------------
+Type
+    ``bool``
+Default
+    `extractor.parent <extractor.*.parent_>`__
+Description
+    Share a parent's
+    `session <https://requests.readthedocs.io/en/latest/user/advanced/#session-objects>`__
+    with its child extractors, including
+    `cookies <extractor.*.cookies_>`__,
+    `headers <extractor.*.headers_>`__,
+    and other networking settings.
+
+
 extractor.*.parent-skip
 -----------------------
 Type
     ``bool``
 Default
-    ``false``
+    `extractor.parent <extractor.*.parent_>`__
 Description
     Share number of skipped downloads between parent and child extractors.
 
@@ -514,6 +564,7 @@ Default
         ``hdoujin``         |
         ``itaku``           |
         ``newgrounds``      |
+        ``[nitter]``        |
         ``[philomena]``     |
         ``pixiv-novel``     |
         ``plurk``           |
@@ -606,7 +657,6 @@ Description
     * ``simpcity``
     * ``subscribestar``
     * ``tapas``
-    * ``tsumino``
     * ``vipergirls``
     * ``zerochan``
 
@@ -630,6 +680,28 @@ Note
     supplying authenticated
     `cookies <extractor.*.cookies_>`__
     is *required*
+
+
+extractor.*.init
+----------------
+Type
+    * ``bool``
+    * ``string``
+Default
+    ``false``
+Description
+    | Controls when to initialize extractor internals.
+    | (
+      `postprocessors <extractor.*.postprocessors_>`_,
+      `archives <extractor.*.archive_>`_,
+      `path-*` options, etc
+      )
+
+    ``true``
+        Initialize everything immediately upon extractor start
+    ``false`` | ``"lazy"``
+        Initialize data structures when processing the first ``post``
+        or not at all when an extractor never yields a ``post``.
 
 
 extractor.*.input
@@ -802,7 +874,9 @@ Default
     ``"gallery-dl/VERSION"``
         * ``[Danbooru]``
         * ``mangadex``
+        * ``[nitter]``
         * ``weasyl``
+        * ``[wikimedia]``
         * ``zerochan``
     ``"gallery-dl/VERSION (by mikf)"``
         * ``[E621]``
@@ -829,7 +903,11 @@ Description
       will use the latest ``User-Agent`` header of this preset target,
       e.g. ``"+ff"``.
     | (Supported values:
-      ``firefox`` | ``ff`` | ``chrome`` | ``cr`` | ``gallery-dl`` | ``gdl``)
+      ``firefox`` | ``ff`` |
+      ``chrome`` | ``cr`` |
+      ``gallery-dl`` | ``gdl`` |
+      ``google-bot`` | ``bot``
+      )
 
     | Starting this value with an ``@``
      will try to automatically detect and use the ``User-Agent`` header
@@ -904,6 +982,29 @@ Description
 
     If this is a ``string``, send it as Referer
     instead of the extractor's ``root`` domain.
+
+
+extractor.*.geo-bypass
+----------------------
+Type
+    * ``string``
+    * ``list`` of ``string``
+Default
+    ``"auto"``
+Example
+    * ``"JP"``
+    * ``"105.48.0.0/12"``
+    * ``"JP,CN,105.48.0.0/12"``
+    * ``["JP", "CN", "105.48.0.0/12"]``
+Description
+    Use a random IP as fake
+    `X-Forwarded-For <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Forwarded-For>`__
+    header to try bypassing geographic restrictions.
+
+    | Can be either
+      `ISO 3166-2 <https://en.wikipedia.org/wiki/ISO_3166-2>`__
+      country codes
+    | or IP blocks in CIDR notation.
 
 
 extractor.*.headers
@@ -1022,12 +1123,14 @@ Note
     with the same name.
 
 
+.. _extractor.*.url-metadata:
+
 extractor.*.metadata-url
-------------------------
-extractor.*.url-metadata
 ------------------------
 Type
     ``string``
+Default
+    ``"_url"``
 Description
     Insert a file's download URL into its metadata dictionary as the given name.
 
@@ -1038,12 +1141,14 @@ Description
     with a ``metadata`` post processor, etc.
 
 
+.. _extractor.*.path-metadata:
+
 extractor.*.metadata-path
--------------------------
-extractor.*.path-metadata
 -------------------------
 Type
     ``string``
+Default
+    ``"_path"``
 Description
     Insert a reference to the current
     `PathFormat <https://github.com/mikf/gallery-dl/blob/v1.27.0/gallery_dl/path.py#L27>`__
@@ -1053,24 +1158,28 @@ Description
     to access the current file's filename as ``"{gdl_path.filename}"``.
 
 
+.. _extractor.*.extractor-metadata:
+
 extractor.*.metadata-extractor
-------------------------------
-extractor.*.extractor-metadata
 ------------------------------
 Type
     ``string``
+Default
+    ``"_extr"``
 Description
     Insert a reference to the current
     `Extractor <https://github.com/mikf/gallery-dl/blob/v1.27.0/gallery_dl/extractor/common.py#L28>`__
     object into metadata dictionaries as the given name.
 
 
+.. _extractor.*.http-metadata:
+
 extractor.*.metadata-http
--------------------------
-extractor.*.http-metadata
 -------------------------
 Type
     ``string``
+Default
+    ``null``
 Description
     Insert an ``object`` containing a file's HTTP headers and
     ``filename``, ``extension``, and ``date`` parsed from them
@@ -1081,12 +1190,14 @@ Description
     and its parsed form as ``"{gdl_http[date]}"``.
 
 
+.. _extractor.*.version-metadata:
+
 extractor.*.metadata-version
-----------------------------
-extractor.*.version-metadata
 ----------------------------
 Type
     ``string``
+Default
+    ``null``
 Description
     Insert an ``object`` containing gallery-dl's version info into
     metadata dictionaries as the given name.
@@ -1454,8 +1565,10 @@ Description
     Use fallback download URLs when a download fails.
 
 
-extractor.*.image-range
------------------------
+.. _extractor.*.image-range:
+
+extractor.*.file-range
+----------------------
 Type
     * ``string``
     * ``list`` of ``strings``
@@ -1485,21 +1598,25 @@ extractor.*.post-range
 Type
     ``string``
 Description
-    Like `image-range <extractor.*.image-range_>`__,
+    Like `file-range <extractor.*.file-range_>`__,
     but for posts.
 
 
-extractor.*.chapter-range
--------------------------
+.. _extractor.*.chapter-range:
+
+extractor.*.child-range
+-----------------------
 Type
     ``string``
 Description
-    Like `image-range <extractor.*.image-range_>`__,
+    Like `file-range <extractor.*.file-range_>`__,
     but for child extractors handling manga chapters, external URLs, etc.
 
 
-extractor.*.image-filter
-------------------------
+.. _extractor.*.image-filter:
+
+extractor.*.file-filter
+-----------------------
 Type
     * Condition_
     * ``list`` of Conditions_
@@ -1523,12 +1640,16 @@ Example
     * ``"post['id'] > 12345"``
     * ``["date >= datetime(2025, 5, 1)", "print(post_id)"]``
 Description
-    Like `image-filter <extractor.*.image-filter_>`__,
+    Like `file-filter <extractor.*.file-filter_>`__,
     but for posts.
 
+    Available values are the directory-specific ones listed by ``-K`` or ``-j``.
 
-extractor.*.chapter-filter
---------------------------
+
+.. _extractor.*.chapter-filter:
+
+extractor.*.child-filter
+------------------------
 Type
     * Condition_
     * ``list`` of Conditions_
@@ -1536,29 +1657,33 @@ Example
     * ``"lang == 'en'"``
     * ``["language == 'French'", "10 <= chapter < 20"]``
 Description
-    Like `image-filter <extractor.*.image-filter_>`__,
+    Like `file-filter <extractor.*.file-filter_>`__,
     but for child extractors handling manga chapters, external URLs, etc.
 
 
-extractor.*.image-unique
+.. _extractor.*.image-unique:
+
+extractor.*.file-unique
+-----------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Ignore file URLs that have been encountered before during the
+    current extractor run.
+
+
+.. _extractor.*.chapter-unique:
+
+extractor.*.child-unique
 ------------------------
 Type
     ``bool``
 Default
     ``false``
 Description
-    Ignore image URLs that have been encountered before during the
-    current extractor run.
-
-
-extractor.*.chapter-unique
---------------------------
-Type
-    ``bool``
-Default
-    ``false``
-Description
-    Like `image-unique <extractor.*.image-unique_>`__,
+    Like `file-unique <extractor.*.file-unique_>`__,
     but applies to delegated URLs like manga chapters, etc.
 
 
@@ -1734,28 +1859,6 @@ Description
         Get posts from "Latest Updates" pages
 
 
-extractor.batoto.domain
------------------------
-Type
-    ``string``
-Default
-    ``"auto"``
-Example
-    ``"mangatoto.org"``
-Description
-    Specifies the domain used by ``batoto`` extractors.
-
-    ``"auto"`` | ``"url"``
-        Use the input URL's domain
-    ``"nolegacy"``
-        Use the input URL's domain
-        - replace legacy domains with ``"xbato.org"``
-    ``"nowarn"``
-        Use the input URL's domain
-        - do not warn about legacy domains
-    any ``string``
-        Use this domain
-
 
 extractor.bbc.width
 -------------------
@@ -1810,6 +1913,16 @@ Default
     ``false``
 Description
     Extract files from quoted content.
+
+
+extractor.bilibili.livephoto
+----------------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Download ``livephoto`` files.
 
 
 extractor.[blogger].api-key
@@ -2058,6 +2171,20 @@ Description
         Match URLs with *all* possible TLDs (e.g. ``bunkr.xyz`` or ``bunkrrr.duck``)
     ``false``
         Match only URLs with known TLDs
+
+
+extractor.[chevereto].password
+------------------------------
+Type
+    * ``string``
+    * ``list`` of ``strings``
+Default
+    ``null``
+Example
+    * ``pw1,pw2,foobar``
+    * ``["pw1", "pw2", "foobar"]``
+Description
+    Password value(s) used to access protected albums.
 
 
 extractor.cien.files
@@ -2991,7 +3118,7 @@ extractor.exhentai.tags
 Type
     ``bool``
 Default
-    ``false``
+    ``true``
 Description
     Group ``tags`` by type and
     provide them as ``tags_<type>`` metadata fields,
@@ -3414,7 +3541,7 @@ extractor.gofile.recursive
 Type
     ``bool``
 Default
-    ``false``
+    ``true``
 Description
     Recursively download files from subfolders.
 
@@ -4458,8 +4585,8 @@ Note
     It is possible to use ``"all"`` instead of listing all values separately.
 
 
-extractor.nitter.quoted
------------------------
+extractor.[nitter].quoted
+-------------------------
 Type
     ``bool``
 Default
@@ -4468,8 +4595,8 @@ Description
     Fetch media from quoted Tweets.
 
 
-extractor.nitter.retweets
--------------------------
+extractor.[nitter].retweets
+---------------------------
 Type
     ``bool``
 Default
@@ -4478,8 +4605,8 @@ Description
     Fetch media from Retweets.
 
 
-extractor.nitter.videos
------------------------
+extractor.[nitter].videos
+-------------------------
 Type
     * ``bool``
     * ``string``
@@ -4785,9 +4912,19 @@ extractor.pixeldrain.recursive
 Type
     ``bool``
 Default
-    ``false``
+    ``true``
 Description
     Recursively download files from subfolders.
+
+
+extractor.pixeldrain.zip
+------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Download albums as a single `.zip` file.
 
 
 extractor.pixiv.include
@@ -5298,6 +5435,16 @@ Note
     but it will not always get the best video quality available.
 
 
+extractor.reddit.user.only
+--------------------------
+Type
+    ``bool``
+Default
+    ``trur``
+Description
+    Only process and return posts from the user specified in the input URL.
+
+
 extractor.redgifs.format
 ------------------------
 Type
@@ -5477,7 +5624,7 @@ extractor.schalenetwork.tags
 Type
     ``bool``
 Default
-    ``false``
+    ``true``
 Description
     Group ``tags`` by type and
     provide them as ``tags_<type>`` metadata fields,
@@ -5862,11 +6009,24 @@ Description
 extractor.tiktok.covers
 -----------------------
 Type
-    ``bool``
+    * ``bool``
+    * ``string``
 Default
     ``false``
 Description
     Download video covers.
+
+    ``true``
+        Download the first cover found in the following order:
+
+        * ``thumbnail``
+        * ``cover``
+        * ``originCover``
+        * ``dynamicCover``
+    ``false``
+        Do not download covers
+    ``"all"``
+        Download all available covers
 
 
 extractor.tiktok.photos
@@ -5877,6 +6037,47 @@ Default
     ``true``
 Description
     Download photos.
+
+
+extractor.tiktok.subtitles
+--------------------------
+Type
+    * ``bool``
+    * ``string``
+Default
+    ``false``
+Example
+    * ``"all"``
+    * ``"ASR,MT,LC"``
+    * ``"ASR,eng-US"``
+Description
+    Download video subtitles.
+    The subtitles can be filtered by source or language.
+    The following source types can be filtered:
+
+    * ``ASR`` - Automatic Speech Recognition
+    * ``MT`` - Machine Translation
+    * ``LC`` - Local Captions / Creator Captions
+
+    If both source types and language codes are provided,
+    only subtitles matching both are downloaded.
+
+    ``true``
+        Download all subtitles tagged ``ASR``
+    ``false``
+        Do not download subtitles
+    ``"all"``
+        Download all available subtitles.
+    ``"ASR,MT,eng-US,cmn-Hans-CN"``
+        Download english and simplified chinese subtitles
+        that are either automatically recognized or machine translated.
+
+        The source types and languages can be listed in any order.
+Note
+    It is not possible to filter all subtitles of a specific source type,
+    while also filtering for additional languages of another source type.
+    (e.g. any ASR subtitle + fra-FR of any source type)
+    For this, refer to `extractor.*.file-filter`_.
 
 
 extractor.tiktok.videos
@@ -6178,6 +6379,16 @@ Description
     Fetch media from promoted Tweets.
 
 
+extractor.twitter.articles
+--------------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Download media embedded in articles.
+
+
 extractor.twitter.cards
 -----------------------
 Type
@@ -6400,6 +6611,23 @@ Description
     Logout and retry as guest when access to another user's Tweets is blocked.
 
 
+extractor.twitter.metadata-user
+-------------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Extract additional metadata for user accounts (``author``, ``user``)
+
+    * ``based_in``
+    * ``location_accurate``
+    * ``name_changes``
+    * ``source``
+Note
+    This requires 1 additional HTTP request per user.
+
+
 extractor.twitter.pinned
 ------------------------
 Type
@@ -6434,6 +6662,9 @@ Description
 
     ``"abort"``
         Raise an error and stop extraction
+    ``"abort:N"``
+        Raise an error and stop extraction
+        after waiting ``N`` times until rate limit reset
     ``"wait"``
         Wait until rate limit reset
     ``"wait:N"``
@@ -6471,8 +6702,8 @@ Note
     use the ``/with_replies`` timeline while logged in. For example,
     media from Tweets which the user replied to will also be downloaded.
 
-    It is possible to exclude unwanted Tweets using `image-filter
-    <extractor.*.image-filter_>`__.
+    It is possible to exclude unwanted Tweets using `file-filter
+    <extractor.*.file-filter_>`__.
 
 
 extractor.twitter.retries-api
@@ -6533,6 +6764,9 @@ Description
     ``"max_id"`` | ``"maxid"`` | ``"id"``
         Update the ``max_id`` search query parameter
         to the Tweet ID value of the last retrieved Tweet.
+    ``"until"`` | ``"date"`` | ``"datetime"`` | ``"dt"``
+        Update the ``until`` search query parameter
+        to the date value of the last retrieved Tweet.
 
 
 extractor.twitter.search-results
@@ -6898,6 +7132,26 @@ Description
     Useful for creating CBZ archives with actual source thumbnails.
 
 
+extractor.weebdex.data-saver
+----------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Enable `Data Saver` mode and download lower quality versions of chapters.
+
+
+extractor.weebdex.manga.lang
+----------------------------
+Type
+    ``string``
+Default
+    ``"en"``
+Description
+    |ISO 639-1| code selecting which chapters to download.
+
+
 extractor.weibo.gifs
 --------------------
 Type
@@ -6928,6 +7182,7 @@ Supported Values
     * ``newvideo``
     * ``article``
     * ``album``
+    * ``subalbums``
 Note
     It is possible to use ``"all"`` instead of listing all values separately.
 
@@ -7049,20 +7304,57 @@ Description
     For ``Category:`` pages, recursively descent into subcategories.
 
 
+extractor.[xenforo].attachments
+-------------------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Extract forum post attachments.
+
+
+extractor.[xenforo].embeds
+--------------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Extract URLs of forum post embeds.
+
+
+extractor.[xenforo].metadata
+----------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Extract detailed metadata for `media` files.
+Note
+    This requires 1 additional HTTP request per file.
+
+
 extractor.[xenforo].order-posts
 -------------------------------
 Type
     ``string``
 Default
-    ``"desc"``
+    ``thread``
+        ``"desc"``
+    otherwise
+        ``"asc"``
 Description
     Controls the order in which
-    posts of a ``thread`` are processed.
+    posts of a ``thread`` or `media` files are processed.
 
     ``"asc"``
         Ascending order (oldest first)
     ``"desc"`` | ``"reverse"``
         Descending order (newest first)
+    ``"reaction"`` | ``"score"``
+        Reaction Score order (``threads`` only)
 
 
 extractor.ytdl.cmdline-args
@@ -7947,6 +8239,17 @@ Description
     Include fallback URLs in the output of ``-g/--get-urls``.
 
 
+output.jsonl
+------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Output ``-j/--dump-json`` & ``-J/--resolve-json``
+    data in `JSON Lines <https://jsonlines.org/>`__ format.
+
+
 output.private
 --------------
 Type
@@ -8498,6 +8801,10 @@ Description
         e.g. a Tweet on Twitter or a post on Patreon.
     ``post-after``
         After downloading all files of a `post`
+    ``child``
+        When spawning a new `child` extractor
+    ``child-after``
+        After a `child` extractor ran
 
 
 metadata.include
@@ -8914,10 +9221,10 @@ Description
     Additional |ffmpeg| command-line arguments.
 
 
+.. _ugoira.ffmpeg-demuxer:
+
 ugoira.mode
 -----------
-ugoira.ffmpeg-demuxer
----------------------
 Type
     ``string``
 Default
@@ -9213,6 +9520,7 @@ Special Values
             {
                 "coomer"       : "coomerparty",
                 "kemono"       : "kemonoparty",
+                "turbo"        : "saint",
                 "schalenetwork": "koharu",
                 "naver-chzzk"  : "chzzk",
                 "naver-blog"   : "naver",
@@ -9240,7 +9548,8 @@ Default
             "chzzk"        : "naver-chzzk",
             "naver"        : "naver-blog",
             "naverwebtoon" : "naver-webtoon",
-            "pixiv"        : "pixiv-novel"
+            "pixiv"        : "pixiv-novel",
+            "saint"        : "turbo"
         }
 Description
     Duplicate the configuration settings of extractor `categories`
@@ -9351,6 +9660,22 @@ Description
     ``"defaultdict"``
         Prevent exceptions when accessing undefined variables
         by using a `defaultdict <https://docs.python.org/3/library/collections.html#collections.defaultdict>`__
+
+
+format-operator-dot
+-------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    In standard `Format Strings`_, allow the `dot` operator ``.``
+    to function as a general access operator
+    in addition to regular attribute access.
+
+    * ``obj.attribute``
+    * ``dict.fieldname``
+    * ``list.123``
 
 
 format-separator
@@ -9766,6 +10091,13 @@ Example
     .. code:: json
 
         {
+            "name"  : "metadata/print@prepare",
+            "format": "{id}: {date}"
+        }
+
+    .. code:: json
+
+        {
             "name"       : "zip",
             "compression": "store",
             "extension"  : "cbz",
@@ -9776,13 +10108,21 @@ Description
     An ``object`` containing a ``"name"`` attribute specifying the
     post-processor type, as well as any of its `options <Postprocessor Options_>`__.
 
-    It is possible to set a ``"filter"`` Condition_ similar to
-    `image-filter <extractor.*.image-filter_>`_
-    to only run a post-processor conditionally.
+    * It is possible to set a ``"filter"`` Condition_ similar to
+      `file-filter <extractor.*.file-filter_>`_
+      to only run a post-processor conditionally.
 
-    It is also possible set a ``"whitelist"`` or ``"blacklist"`` to
-    only enable or disable a post-processor for the specified
-    extractor categories.
+    * It is possible set a ``"whitelist"`` or ``"blacklist"`` to
+      only enable or disable a post-processor for the specified
+      extractor categories.
+
+    * It is possible to specify a post-processor's ``mode`` & ``event``
+      as part of its ``name`` by adding ``/MODE`` & ``@EVENT``.
+      For example
+
+        * ``"name": "metadata/jsonl@post"``
+        * ``"name": "ugoira/archive"``
+        * ``"name": "exec@error"``
 
     The available post-processor types are
 
@@ -9867,7 +10207,7 @@ Description
 
         | Expected syntax is ``<flag>[ = <value>]`` (e.g. ``post = stop``)
         | ``<flag>`` can be one of ``file``, ``post``, ``child``, ``download``
-        | ``<value>`` can be one of ``stop``, ``abort``, ``terminate``, ``restart`` (default ``stop``)
+        | ``<value>`` can be one of ``stop``, ``abort``, ``terminate``, ``restart``, ``skip`` (default ``stop``)
     ``wait``:
         | Sleep for a given Duration_ or
         | wait until Enter is pressed when no argument was given.
@@ -9914,7 +10254,7 @@ Example
     * ``"foo"``
     * ``"{username}"``
     * ``"{title} ({id}).{extension}"``
-    * ``"\fF {title.title()} ({num:>0:>0{len(str(a))}} / {count}).{extension}"``
+    * ``"\fF {title.title()} ({num:>0{len(str(count))}} / {count}).{extension}"``
 Description
     A `Format String`_ allows creating dynamic text
     by embedding metadata values directly into replacement fields
