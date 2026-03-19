@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2023-2025 Mike Fährmann
+# Copyright 2023-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://vipergirls.to/"""
 
 from .common import Extractor, Message
-from .. import text, util, exception
-from ..cache import cache
+from .. import text, util
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?vipergirls\.to"
 
@@ -88,9 +87,10 @@ class VipergirlsExtractor(Extractor):
 
         username, password = self._get_auth_info()
         if username:
-            self.cookies_update(self._login_impl(username, password))
+            return self.cookies_update(self.cache(
+                self._login_impl, username, password,
+                _exp=90*86400, _mem=False))
 
-    @cache(maxage=90*86400, keyarg=1)
     def _login_impl(self, username, password):
         self.log.info("Logging in as %s", username)
 
@@ -104,7 +104,7 @@ class VipergirlsExtractor(Extractor):
 
         response = self.request(url, method="POST", data=data)
         if not response.cookies.get("vg_password"):
-            raise exception.AuthenticationError()
+            raise self.exc.AuthenticationError()
 
         return {cookie.name: cookie.value
                 for cookie in response.cookies}

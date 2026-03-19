@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2014-2025 Mike Fährmann
+# Copyright 2014-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://www.pixiv.net/"""
 
 from .common import Extractor, Message, Dispatch
-from .. import text, util, dt, exception
-from ..cache import cache, memcache
+from .. import text, util, dt
 import itertools
 import hashlib
 
@@ -105,8 +104,11 @@ class PixivExtractor(Extractor):
             for work["num"], file in enumerate(files):
                 url = file["url"]
                 work.update(file)
+                text.nameext_from_url(url, work)
                 work["date_url"] = self._date_from_url(url)
-                yield Message.Url, url, text.nameext_from_url(url, work)
+                work["hash"] = (name[name.find("-")+1:name.rfind("_")]
+                                if "-" in (name := work["filename"]) else "")
+                yield Message.Url, url, work
 
     def _extract_files(self, work):
         meta_single_page = work["meta_single_page"]
@@ -131,11 +133,11 @@ class PixivExtractor(Extractor):
             self.log.debug("%s: %s", work_id, url)
 
             limit_type = url.rpartition("/")[2]
-            if limit_type in (
+            if limit_type in {
                 "limit_",  # for '_extend_sanity()' inserts
                 "limit_unviewable_360.png",
                 "limit_sanity_level_360.png",
-            ):
+            }:
                 work["_ajax"] = True
                 self.log.warning("%s: 'limit_sanity_level' warning", work_id)
                 if self.sanity_workaround:
@@ -205,7 +207,7 @@ class PixivExtractor(Extractor):
                         url = f"{base}0.{ext}"
                         self.request(url, method="HEAD")
                         break
-                    except exception.HttpError:
+                    except self.exc.HttpError:
                         pass
                 else:
                     self.log.warning(
@@ -329,7 +331,7 @@ class PixivExtractor(Extractor):
                 url = f"{base}_p0.{ext}"
                 self.request(url, method="HEAD")
                 return url
-            except exception.HttpError:
+            except self.exc.HttpError:
                 pass
 
     def _sanitize_ajax_caption(self, caption):
@@ -721,7 +723,7 @@ class PixivRankingExtractor(PixivExtractor):
         try:
             self.mode = mode = mode_map[mode]
         except KeyError:
-            raise exception.AbortExtraction(f"Invalid mode '{mode}'")
+            raise self.exc.AbortExtraction(f"Invalid mode '{mode}'")
 
         if date := query.get("date"):
             if len(date) == 8 and date.isdecimal():
@@ -772,7 +774,7 @@ class PixivSearchExtractor(PixivExtractor):
             try:
                 self.word = query["word"]
             except KeyError:
-                raise exception.AbortExtraction("Missing search term")
+                raise self.exc.AbortExtraction("Missing search term")
 
         sort = query.get("order", "date_d")
         sort_map = {
@@ -785,7 +787,7 @@ class PixivSearchExtractor(PixivExtractor):
         try:
             self.sort = sort = sort_map[sort]
         except KeyError:
-            raise exception.AbortExtraction(f"Invalid search order '{sort}'")
+            raise self.exc.AbortExtraction(f"Invalid search order '{sort}'")
 
         target = query.get("s_mode", "s_tag_full")
         target_map = {
@@ -796,7 +798,7 @@ class PixivSearchExtractor(PixivExtractor):
         try:
             self.target = target = target_map[target]
         except KeyError:
-            raise exception.AbortExtraction(f"Invalid search mode '{target}'")
+            raise self.exc.AbortExtraction(f"Invalid search mode '{target}'")
 
         self.date_start = query.get("scd")
         self.date_end = query.get("ecd")
@@ -810,9 +812,9 @@ class PixivSearchExtractor(PixivExtractor):
         }}
 
 
-class PixivFollowExtractor(PixivExtractor):
+class PixivFollowedExtractor(PixivExtractor):
     """Extractor for new illustrations from your followed artists"""
-    subcategory = "follow"
+    subcategory = "followed"
     archive_fmt = "F_{user_follow[id]}_{id}{num}.{extension}"
     directory_fmt = ("{category}", "following")
     pattern = BASE_PATTERN + r"/bookmark_new_illust\.php"
@@ -1123,6 +1125,7 @@ class PixivAppAPI():
     def __init__(self, extractor):
         self.extractor = extractor
         self.log = extractor.log
+        self.exc = extractor.exc
         self.username = extractor._get_auth_info()[0]
         self.user = None
 
@@ -1142,18 +1145,19 @@ class PixivAppAPI():
 
         token = extractor.config("refresh-token")
         if token is None or token == "cache":
-            token = _refresh_token_cache(self.username)
+            token = extractor.cache(
+                _refresh_token_cache, self.username, _mem=False)
         self.refresh_token = token
 
     def login(self):
         """Login and gain an access token"""
-        self.user, auth = self._login_impl(self.username)
+        self.user, auth = self.extractor.cache(
+            self._login_impl, self.username, _exp=3600, _mem=False)
         self.extractor.session.headers["Authorization"] = auth
 
-    @cache(maxage=3600, keyarg=1)
     def _login_impl(self, username):
         if not self.refresh_token:
-            raise exception.AuthenticationError(
+            raise self.exc.AuthenticationError(
                 "'refresh-token' required.\n"
                 "Run `gallery-dl oauth:pixiv` to get one.")
 
@@ -1178,7 +1182,7 @@ class PixivAppAPI():
             url, method="POST", headers=headers, data=data, fatal=False)
         if response.status_code >= 400:
             self.log.debug(response.text)
-            raise exception.AuthenticationError("Invalid refresh token")
+            raise self.exc.AuthenticationError("Invalid refresh token")
 
         data = response.json()["response"]
         return data["user"], "Bearer " + data["access_token"]
@@ -1266,8 +1270,10 @@ class PixivAppAPI():
         return self._pagination(
             "/v1/user/bookmark-tags/illust", params, "bookmark_tags")
 
-    @memcache(keyarg=1)
     def user_detail(self, user_id, fatal=True):
+        return self.extractor.cache(self._user_detail_impl, user_id, fatal)
+
+    def _user_detail_impl(self, user_id, fatal):
         params = {"user_id": user_id}
         return self._call("/v1/user/detail", params, fatal=fatal)
 
@@ -1305,7 +1311,7 @@ class PixivAppAPI():
             self.log.debug(data)
 
             if response.status_code == 404:
-                raise exception.NotFoundError()
+                raise self.exc.NotFoundError()
 
             error = data["error"]
             if "rate limit" in (error.get("message") or "").lower():
@@ -1315,7 +1321,7 @@ class PixivAppAPI():
             msg = (f"'{msg}'" if (msg := error.get("user_message")) else
                    f"'{msg}'" if (msg := error.get("message")) else
                    error)
-            raise exception.AbortExtraction("API request failed: " + msg)
+            raise self.exc.AbortExtraction("API request failed: " + msg)
 
     def _pagination(self, endpoint, params,
                     key_items="illusts", key_data=None, key_user=None):
@@ -1326,7 +1332,7 @@ class PixivAppAPI():
         if key_user is not None and not data[key_user].get("id"):
             user = self.user_detail(self.extractor.user_id, fatal=False)
             if user.get("error"):
-                raise exception.NotFoundError("user")
+                raise self.exc.NotFoundError("user")
             return
 
         while True:
@@ -1381,6 +1387,5 @@ class PixivAppAPI():
                 params.pop("offset", None)
 
 
-@cache(maxage=36500*86400, keyarg=0)
 def _refresh_token_cache(username):
     return None

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2018-2023 Mike Fährmann
+# Copyright 2018-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation.
 
-"""Execute processes"""
+"""Run external processes"""
 
 from .common import PostProcessor
 from .. import util, formatter
@@ -39,6 +39,7 @@ class ExecPP(PostProcessor):
             if options.get("async", False):
                 self._exec = self._popen
 
+        self.output = options.get("output", True)
         self.verbose = options.get("verbose", True)
         self.session = False
         self.creationflags = 0
@@ -47,6 +48,16 @@ class ExecPP(PostProcessor):
                 self.creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
             else:
                 self.session = True
+
+        s = options.get("success")
+        e = options.get("error")
+        if s or e:
+            from .. import actions
+            self.action_success = None if s is None else actions.parse(s)
+            self.action_error = None if e is None else actions.parse(e)
+            self.action_args = {"job": job, "level": 0}
+        else:
+            self.action_success = self.action_error = None
 
         events = options.get("event")
         if events is None:
@@ -61,7 +72,8 @@ class ExecPP(PostProcessor):
     def _prepare_cmd(self, cmd):
         if isinstance(cmd, str):
             self._sub = util.re(
-                r"\{(_directory|_filename|_(?:temp)?path|)\}").sub
+                r"(?i)\{(_directory(?:_unc)?|_filename"
+                r"|_(?:temp)?path(?:_unc)?|)\}").sub
             return self.exec_string, cmd
         else:
             return self.exec_list, [formatter.parse(arg) for arg in cmd]
@@ -73,10 +85,13 @@ class ExecPP(PostProcessor):
         if archive and archive.check(kwdict):
             return
 
-        kwdict["_directory"] = pathfmt.realdirectory
+        kwdict["_directory"] = pathfmt.directory
         kwdict["_filename"] = pathfmt.filename
         kwdict["_temppath"] = pathfmt.temppath
-        kwdict["_path"] = pathfmt.realpath
+        kwdict["_path"] = pathfmt.path
+        if util.WINDOWS:
+            kwdict["_directory_unc"] = pathfmt.realdirectory
+            kwdict["_path_unc"] = pathfmt.realpath
 
         args = [arg.format_map(kwdict) for arg in self.args]
         args[0] = os.path.expanduser(args[0])
@@ -121,26 +136,35 @@ class ExecPP(PostProcessor):
         if retcode := self._popen(args, shell).wait():
             self.log.warning("'%s' returned with non-zero exit status (%d)",
                              args if self.verbose else trim(args), retcode)
+            if self.action_error is not None:
+                self.action_error(self.action_args)
+        elif self.action_success is not None:
+            self.action_success(self.action_args)
         return retcode
 
     def _popen(self, args, shell):
         self.log.debug("Running '%s'", args if self.verbose else trim(args))
+        out = None if self.output else subprocess.DEVNULL
         return util.Popen(
             args,
             shell=shell,
+            stdout=out, stderr=out,
             creationflags=self.creationflags,
             start_new_session=self.session,
         )
 
     def _replace(self, match):
-        name = match[1]
-        if name == "_directory":
-            return quote(self.pathfmt.realdirectory)
-        if name == "_filename":
-            return quote(self.pathfmt.filename)
-        if name == "_temppath":
-            return quote(self.pathfmt.temppath)
-        return quote(self.pathfmt.realpath)
+        attr = {
+            ""              : "path",
+            "_path"         : "path",
+            "_path_unc"     : "realpath",
+            "_temppath"     : "temppath",
+            "_temppath_unc" : "temppath",
+            "_directory"    : "directory",
+            "_directory_unc": "realdirectory",
+            "_filename"     : "filename",
+        }[match[1].lower()]
+        return quote(getattr(self.pathfmt, attr))
 
 
 __postprocessor__ = ExecPP

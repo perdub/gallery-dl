@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright 2015-2025 Mike Fährmann
+# Copyright 2015-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -10,7 +10,7 @@
 import os
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import io
 import time
@@ -23,7 +23,7 @@ import itertools
 import http.cookiejar
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from gallery_dl import util, text, exception  # noqa E402
+from gallery_dl import util, text, dt, exception  # noqa E402
 
 
 class TestRange(unittest.TestCase):
@@ -103,6 +103,10 @@ class TestRange(unittest.TestCase):
 
 class TestPredicate(unittest.TestCase):
 
+    def assertDate(self, expected, dt_string):
+        kwdict = {"date": dt.parse_iso(dt_string)} if dt_string else {}
+        self.assertEqual(bool(expected), self.pred("", kwdict), msg=dt_string)
+
     def test_predicate_range(self):
         dummy = None
 
@@ -168,6 +172,181 @@ class TestPredicate(unittest.TestCase):
         pred = util.predicate_filter("re.search(r'.+', url)")
         self.assertTrue(pred(url, {"url": "https://example.org/"}))
         self.assertFalse(pred(url, {"url": ""}))
+
+    def test_predicate_tags(self):
+        url = ""
+
+        pred = util.predicate_tags("")
+        self.assertTrue(pred(url, {}))
+        self.assertTrue(pred(url, {"a": 3}))
+        self.assertTrue(pred(url, {"tags": []}))
+        self.assertTrue(pred(url, {"tags": ["foo", "bar"]}))
+        self.assertTrue(pred(url, {"tags": ["foo", "bar", "baz"]}))
+
+        pred = util.predicate_tags("baz")
+        self.assertTrue(pred(url, {}))
+        self.assertTrue(pred(url, {"a": 3}))
+        self.assertTrue(pred(url, {"tags": []}))
+        self.assertTrue(pred(url, {"tags": ["foo", "bar"]}))
+        self.assertFalse(pred(url, {"tags": ["foo", "bar", "baz"]}))
+
+        pred = util.predicate_tags(" t1 , t2,t3,     T4  ")
+        self.assertTrue(pred(url, {"tags": ["foo", "bar"]}))
+        self.assertFalse(pred(url, {"tags": ["foo", "t4", "bar"]}))
+        self.assertFalse(pred(url, {"tags": ["t3", "t2", "t1"]}))
+
+        pred = util.predicate_tags(" t1 , t2,t3,     T4  ")
+        self.assertTrue(pred(url, {"tags": "foo, bar, baz"}))
+        self.assertFalse(pred(url, {"tags": "foo, t4, baz"}))
+        self.assertFalse(pred(url, {"tags": "t3, t2, t1"}))
+        self.assertFalse(pred(url, {"tags": "t3 abcde t2 xyz t1"}))
+
+    def test_predicate_tags_negate(self):
+        url = ""
+
+        pred = util.predicate_tags("", negate=True)
+        self.assertTrue(pred(url, {}))
+        self.assertTrue(pred(url, {"a": 3}))
+        self.assertTrue(pred(url, {"tags": []}))
+        self.assertFalse(pred(url, {"tags": ["foo", "bar"]}))
+        self.assertFalse(pred(url, {"tags": ["foo", "bar", "baz"]}))
+
+        pred = util.predicate_tags("baz", negate=True)
+        self.assertTrue(pred(url, {}))
+        self.assertTrue(pred(url, {"a": 3}))
+        self.assertTrue(pred(url, {"tags": []}))
+        self.assertFalse(pred(url, {"tags": ["foo", "bar"]}))
+        self.assertTrue(pred(url, {"tags": ["foo", "bar", "baz"]}))
+
+        pred = util.predicate_tags(" t1 , t2,t3,     T4  ", negate=True)
+        self.assertFalse(pred(url, {"tags": ["foo", "bar"]}))
+        self.assertTrue(pred(url, {"tags": ["foo", "t4", "bar"]}))
+        self.assertTrue(pred(url, {"tags": ["t3", "t2", "t1"]}))
+
+        pred = util.predicate_tags(" t1 , t2,t3,     T4  ", negate=True)
+        self.assertFalse(pred(url, {"tags": "foo, bar, baz"}))
+        self.assertTrue(pred(url, {"tags": "foo, t4, baz"}))
+        self.assertTrue(pred(url, {"tags": "t3, t2, t1"}))
+        self.assertTrue(pred(url, {"tags": "t3 abcde t2 xyz t1"}))
+
+    def test_predicate_tags_file(self):
+        url = ""
+
+        with tempfile.NamedTemporaryFile() as tmp:
+            pred = util.predicate_tags(tmp.name)
+            self.assertTrue(pred(url, {}))
+            self.assertTrue(pred(url, {"a": 3}))
+            self.assertTrue(pred(url, {"tags": []}))
+            self.assertTrue(pred(url, {"tags": ["foo", "bar"]}))
+            self.assertTrue(pred(url, {"tags": ["foo", "bar", "baz"]}))
+
+            tmp.write(b"baz")
+            tmp.flush()
+            pred = util.predicate_tags(tmp.name)
+            self.assertTrue(pred(url, {}))
+            self.assertTrue(pred(url, {"a": 3}))
+            self.assertTrue(pred(url, {"tags": []}))
+            self.assertTrue(pred(url, {"tags": ["foo", "bar"]}))
+            self.assertFalse(pred(url, {"tags": ["foo", "bar", "baz"]}))
+
+            tmp.seek(0)
+            tmp.write(b" t1 \n t2\nt3\n\n\n     T4  \n")
+            tmp.flush()
+            pred = util.predicate_tags(tmp.name)
+            self.assertTrue(pred(url, {"tags": ["foo", "bar"]}))
+            self.assertFalse(pred(url, {"tags": ["foo", "t4", "bar"]}))
+            self.assertFalse(pred(url, {"tags": ["t3", "t2", "t1"]}))
+
+            tmp.seek(0)
+            tmp.write(b" t1 \n t2\nt3\n\n\n     T4  \n")
+            tmp.flush()
+            pred = util.predicate_tags(tmp.name)
+            self.assertTrue(pred(url, {"tags": "foo, bar, baz"}))
+            self.assertFalse(pred(url, {"tags": "foo, t4, baz"}))
+            self.assertFalse(pred(url, {"tags": "t3, t2, t1"}))
+            self.assertFalse(pred(url, {"tags": "t3 abcde t2 xyz t1"}))
+
+    def test_predicate_date(self):
+        self.pred = util.predicate_date(
+            before=dt.parse_iso("2021-11-11"),
+            after=dt.parse_iso("2020-10-10"))
+        self.assertTrue(callable(self.pred))
+        self.assertDate(1, "")
+        self.assertDate(0, "2021-11-11 12:34:56")
+        self.assertDate(0, "2021-11-11")
+        self.assertDate(1, "2021-11-10 23:59:59")
+        self.assertDate(1, "2020-10-10 12:34:56")
+        with self.assertRaises(exception.StopExtraction):
+            self.assertDate(0, "2020-10-10")
+        with self.assertRaises(exception.StopExtraction):
+            self.assertDate(0, "2020-10-09")
+
+        func = Mock(return_value=True)
+        self.pred = util.predicate_date(
+            before=dt.parse_iso("2021-11-11"),
+            after=dt.parse_iso("2020-10-10"),
+            skip=func)
+        func.assert_called_with(dt.datetime(2021, 11, 11))
+        self.assertTrue(callable(self.pred))
+        self.assertIsNot(self.pred, util.true)
+
+    def test_predicate_date2(self):
+        # 'after' > 'before'
+        self.pred = util.predicate_date(
+            after=dt.parse_iso("2021-11-11"),
+            before=dt.parse_iso("2020-10-10"))
+        self.assertTrue(callable(self.pred))
+        self.assertDate(1, "")
+        self.assertDate(1, "2021-12-12 12:34:56")
+        self.assertDate(1, "2021-11-11 12:34:56")
+        with self.assertRaises(exception.StopExtraction):
+            self.assertDate(0, "2021-11-11")
+
+        func = Mock(return_value=True)
+        self.pred = util.predicate_date(
+            after=dt.parse_iso("2021-11-11"),
+            before=dt.parse_iso("2020-10-10"),
+            skip=func)
+        func.assert_not_called()
+        self.assertTrue(callable(self.pred))
+        self.assertIsNot(self.pred, util.true)
+
+    def test_predicate_date_before(self):
+        self.pred = util.predicate_date(dt.parse_iso("2020-10-10"))
+        self.assertTrue(callable(self.pred))
+
+        self.assertDate(1, "")
+        self.assertDate(0, "2022-11-11")
+        self.assertDate(0, "2020-10-10 12:34:56")
+        self.assertDate(0, "2020-10-10")
+        self.assertDate(1, "2020-10-09 12:34:56")
+        self.assertDate(1, "2020-10-09")
+
+        func = Mock(return_value=True)
+        pred = util.predicate_date(dt.parse_iso("2020-10-10"), skip=func)
+        func.assert_called_with(dt.datetime(2020, 10, 10))
+        self.assertTrue(callable(pred))
+        self.assertIs(pred, util.true)
+
+        func = Mock(return_value=None)
+        pred = util.predicate_date(dt.parse_iso("2020-10-10"), skip=func)
+        func.assert_called_with(dt.datetime(2020, 10, 10))
+        self.assertTrue(callable(pred))
+        self.assertIsNot(pred, util.true)
+
+    def test_predicate_date_after(self):
+        self.pred = util.predicate_date(None, dt.parse_iso("2020-10-10"))
+        self.assertTrue(callable(self.pred))
+
+        self.assertDate(1, "")
+        self.assertDate(1, "2022-11-11")
+        self.assertDate(1, "2020-10-10 12:34:56")
+        with self.assertRaises(exception.StopExtraction):
+            self.assertDate(0, "2020-10-10")
+        with self.assertRaises(exception.StopExtraction):
+            self.assertDate(0, "2020-10-09 12:34:56")
+        with self.assertRaises(exception.StopExtraction):
+            self.assertDate(0, "2020-10-09")
 
     def test_predicate_build(self):
         pred = util.predicate_build([])
@@ -434,6 +613,20 @@ class TestOther(unittest.TestCase):
                 result = util.bdecode(util.bencode(value, alphabet), alphabet)
                 self.assertEqual(result, value)
 
+    def test_b36encode(self, f=util.b36encode):
+        self.assertEqual(f(0), "")
+        self.assertEqual(f(16), "g")
+        self.assertEqual(f(37), "11")
+        self.assertEqual(f(123), "3f")
+        self.assertEqual(f(1234567890), "kf12oi")
+
+    def test_b36decode(self, f=util.b36decode):
+        self.assertEqual(f(""), 0)
+        self.assertEqual(f("g"), 16)
+        self.assertEqual(f("11"), 37)
+        self.assertEqual(f("3f"), 123)
+        self.assertEqual(f("kf12oi"), 1234567890)
+
     def test_advance(self):
         items = range(5)
 
@@ -613,9 +806,63 @@ value = 123
         test_single(f("3", 0, pb)     , 3, int)
         test_single(f("3.0-", 0, pb)  , 3, int)
         test_single(f("  3  -", 0, pb), 3, int)
-
         test_range(f("2k-4k", 0, pb)        , 2048, 4096, int)
         test_range(f("  2.0k  - 4k ", 0, pb), 2048, 4096, int)
+
+    def test_build_duration_func_ex(self, f=util.build_duration_func_ex):
+
+        def test(v, a, b=None):
+            df = f(v)
+            if "=" in v:
+                if b is None:
+                    for n, a in enumerate(a, 1):
+                        self.assertEqual(df(n), a)
+                else:
+                    for n, (a, b) in enumerate(zip(a, b), 1):
+                        v = df(n)
+                        self.assertGreaterEqual(v, a)
+                        self.assertLessEqual(v, b)
+            else:
+                if b is None:
+                    for n in range(10):
+                        self.assertEqual(df(n), a)
+                else:
+                    for n in range(10):
+                        v = df(n)
+                        self.assertGreaterEqual(v, a)
+                        self.assertLessEqual(v, b)
+
+        for v in (0, 0.0, "", None, (), []):
+            self.assertIsNone(f(v))
+
+        test("3", 3.0)
+        test("3-5", 3.0, 5.0)
+
+        test("lin=3"     , ( 3, 6, 9, 12, 15))   # noqa E201
+        test("lin:8=3"  , (11, 14, 17, 20, 23))
+        test("lin:8:20=5", (13, 18, 20, 20, 20))
+        test("lin=2-5"     ,
+             (2,  4,  6,  8, 10),  # noqa E241
+             (5, 10, 15, 20, 25))
+        test("lin:8=2-5"   ,
+             (10, 12, 14, 16, 18),
+             (13, 18, 23, 28, 33))
+        test("lin:8:20=2-5",
+             (10, 12, 14, 16, 18),
+             (13, 18, 20, 20, 20))
+
+        test("exp=3"       , (3*1, 3*2, 3*4, 3*8, 3*16))
+        test("exp:1.5=3"   , (3*1, 3*1.5, 3*1.5**2, 3*1.5**3))
+        test("exp::20:40=3", (23, 26, 32, 40, 40))
+        test("exp=2-4"    ,
+             (2*1, 2*2, 2*4, 2*8, 2*16),
+             (4*1, 4*2, 4*4, 4*8, 4*16))
+        test("exp:3=2-4"  ,
+             (2*1, 2*3, 2*9, 2*27, 2*81),
+             (4*1, 4*3, 4*9, 4*27, 4*81))
+        test("exp:3::40=2-4",
+             (2*1, 2*3, 2*9, 40, 40),
+             (4*1, 4*3,  40, 40, 40))  # noqa E241
 
     def test_extractor_filter(self):
         # empty

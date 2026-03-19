@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2022-2025 Mike Fährmann
+# Copyright 2022-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://www.zerochan.net/"""
 
 from .booru import BooruExtractor
-from ..cache import cache
-from .. import text, util, exception
+from .. import text, util
 import collections
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?zerochan\.net"
@@ -36,11 +35,12 @@ class ZerochanExtractor(BooruExtractor):
 
         username, password = self._get_auth_info()
         if username:
-            return self.cookies_update(self._login_impl(username, password))
+            return self.cookies_update(self.cache(
+                self._login_impl, username, password,
+                _exp=90*86400, _mem=False))
 
         self._logged_in = False
 
-    @cache(maxage=90*86400, keyarg=1)
     def _login_impl(self, username, password):
         self.log.info("Logging in as %s", username)
 
@@ -59,7 +59,7 @@ class ZerochanExtractor(BooruExtractor):
         response = self.request(
             url, method="POST", headers=headers, data=data, expected=(500,))
         if not response.history:
-            raise exception.AuthenticationError()
+            raise self.exc.AuthenticationError()
 
         return response.cookies
 
@@ -196,7 +196,7 @@ class ZerochanTagExtractor(ZerochanExtractor):
             try:
                 page = self.request(
                     url, params=params, expected=(500,)).text
-            except exception.HttpError as exc:
+            except self.exc.HttpError as exc:
                 if exc.status == 404:
                     return
                 raise
@@ -241,7 +241,7 @@ class ZerochanTagExtractor(ZerochanExtractor):
             try:
                 response = self.request(
                     url, params=params, allow_redirects=False)
-            except exception.HttpError as exc:
+            except self.exc.HttpError as exc:
                 if exc.status == 404:
                     return
                 raise
@@ -251,7 +251,7 @@ class ZerochanTagExtractor(ZerochanExtractor):
                 self.log.warning("HTTP redirect to %s", url)
                 if self.config("redirects"):
                     continue
-                raise exception.AbortExtraction()
+                raise self.exc.AbortExtraction()
 
             data = response.json()
             try:
@@ -293,8 +293,8 @@ class ZerochanImageExtractor(ZerochanExtractor):
 
         try:
             post = self._parse_entry_html(image_id)
-        except exception.HttpError as exc:
-            if exc.status in (404, 410):
+        except self.exc.HttpError as exc:
+            if exc.status in {404, 410}:
                 if msg := text.extr(exc.response.text, "<h2>", "<"):
                     self.log.warning(f"'{msg}'")
                 return ()

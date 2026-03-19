@@ -9,8 +9,7 @@
 """Collection of extractors for various imagehosts"""
 
 from .common import Extractor, Message
-from .. import text, exception
-from ..cache import memcache
+from .. import text
 
 
 class ImagehostImageExtractor(Extractor):
@@ -43,11 +42,15 @@ class ImagehostImageExtractor(Extractor):
             }
 
     def items(self):
+        _cookies = self._cookies
+        if _cookies is not None and callable(_cookies):
+            _cookies = self.cache(_cookies, _key=None, _exp=3*3600)
+
         page = self.request(
             self.page_url,
             method=("POST" if self._params else "GET"),
             data=self._params,
-            cookies=self._cookies,
+            cookies=_cookies,
             encoding=self._encoding,
         ).text
 
@@ -81,7 +84,7 @@ class ImagehostImageExtractor(Extractor):
         return ()
 
     def not_found(self, resource=None):
-        raise exception.NotFoundError(resource or self.__class__.subcategory)
+        raise self.exc.NotFoundError(resource or self.__class__.subcategory)
 
 
 class ImxtoImageExtractor(ImagehostImageExtractor):
@@ -176,8 +179,6 @@ class ImagevenueImageExtractor(ImagehostImageExtractor):
                r"/([A-Z0-9]{8,10}|view/.*|img\.php\?.*))")
     example = "https://www.imagevenue.com/ME123456789"
 
-    @property
-    @memcache(maxage=3*3600)
     def _cookies(self):
         return self.request(self.page_url).cookies
 
@@ -209,8 +210,6 @@ class ImagetwistImageExtractor(ImagehostImageExtractor):
                r"/([a-z0-9]{12}))")
     example = "https://imagetwist.com/123456abcdef/NAME.EXT"
 
-    @property
-    @memcache(maxage=3*3600)
     def _cookies(self):
         return self.request(self.page_url).cookies
 
@@ -336,7 +335,7 @@ class PostimgImageExtractor(ImagehostImageExtractor):
     def get_info(self, page):
         pos = page.index(' id="download"')
         url     , pos = text.rextract(page, ' href="', '"', pos)
-        filename, pos = text.extract(page, ' class="my-4">', '<', pos)
+        filename, pos = text.extract(page, ' alt="', '"', pos)
         return url, text.unescape(filename) if filename else None
 
 
@@ -351,17 +350,35 @@ class PostimgGalleryExtractor(ImagehostImageExtractor):
 
     def items(self):
         page = self.request(self.page_url).text
-        title = text.extr(
-            page, 'property="og:title" content="', ' — Postimages"')
+        title = text.unescape(text.extr(
+            page, 'property="og:title" content="', ' — Postimages"'))
 
-        data = {
-            "_extractor"   : PostimgImageExtractor,
-            "gallery_title": text.unescape(title),
+        url = self.root + "/json"
+        params = {
+            "action": "list",
+            "page"  : 1,
+            "album" : self.groups[1],
         }
 
-        for token in text.extract_iter(page, 'data-image="', '"'):
-            url = f"{self.root}/{token}"
-            yield Message.Queue, url, data
+        base = self.root + "/"
+        while True:
+            data = self.request_json(url, params=params)
+
+            for token, t, name, ext, w, h, _, _, _, _, _ in data["images"]:
+                yield Message.Queue, base + t, {
+                    "_extractor"   : PostimgImageExtractor,
+                    "gallery_title": title,
+                    "token"    : token,
+                    "filename" : name,
+                    "extension": ext,
+                    "width"    : w,
+                    "height"   : h,
+                    "thumbnail": t,
+                }
+
+            if not data.get("has_page_next"):
+                break
+            params["page"] += 1
 
 
 class TurboimagehostImageExtractor(ImagehostImageExtractor):
@@ -411,8 +428,11 @@ class ViprImageExtractor(ImagehostImageExtractor):
     example = "https://vipr.im/abc123.html"
 
     def get_info(self, page):
-        url = text.extr(page, '<img src="', '"')
-        return url, None
+        url, pos = text.extract(page, '<img src="', '"')
+        if not url or url[0] != "h":
+            self.not_found()
+        alt, pos = text.extract(page, ' alt="', '"', pos)
+        return url, alt and text.unescape(alt)
 
 
 class ImgclickImageExtractor(ImagehostImageExtractor):

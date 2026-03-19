@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2024-2025 Mike Fährmann
+# Copyright 2024-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://www.civitai.com/"""
 
 from .common import Extractor, Message, Dispatch
-from .. import text, util, exception
-from ..cache import memcache
+from .. import text, util
 import itertools
 import time
 
@@ -201,7 +200,8 @@ class CivitaiExtractor(Extractor):
         if "Authorization" not in self.api.headers and \
                 not self.cookies.get(
                 "__Secure-civitai-token", domain=".civitai.com"):
-            raise exception.AuthRequired(("api-key", "authenticated cookies"))
+            raise self.extractor.exc.AuthRequired(
+                ("api-key", "authenticated cookies"))
 
     def _parse_query(self, value):
         return text.parse_query_list(
@@ -231,7 +231,7 @@ class CivitaiExtractor(Extractor):
     def _extract_meta_version(self, item, is_post=True):
         try:
             if version_id := self._extract_version_id(item, is_post):
-                version = self.api.model_version(version_id).copy()
+                version = self.cache(self.api.model_version, version_id).copy()
                 return version.pop("model", None), version
         except Exception as exc:
             self.log.traceback(exc)
@@ -280,7 +280,7 @@ class CivitaiModelExtractor(CivitaiExtractor):
                 if version["id"] == version_id:
                     break
             else:
-                version = self.api.model_version(version_id)
+                version = self.cache(self.api.model_version, version_id)
             versions = (version,)
 
         for version in versions:
@@ -650,7 +650,6 @@ class CivitaiRestAPI():
         endpoint = "/v1/models/" + str(model_id)
         return self._call(endpoint)
 
-    @memcache(keyarg=1)
     def model_version(self, model_version_id):
         endpoint = "/v1/model-versions/" + str(model_version_id)
         return self._call(endpoint)
@@ -761,7 +760,6 @@ class CivitaiTrpcAPI():
         params = {"id": int(model_id)}
         return self._call(endpoint, params)
 
-    @memcache(keyarg=1)
     def model_version(self, model_version_id):
         endpoint = "modelVersion.getById"
         params = {"id": int(model_version_id)}

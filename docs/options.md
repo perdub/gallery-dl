@@ -11,7 +11,9 @@
 * [Output Options](#output-options)
 * [Networking Options](#networking-options)
 * [Downloader Options](#downloader-options)
+* [Sleep Options](#sleep-options)
 * [Configuration Options](#configuration-options)
+* [Cache Options](#cache-options)
 * [Authentication Options](#authentication-options)
 * [Cookie Options](#cookie-options)
 * [Selection Options](#selection-options)
@@ -25,12 +27,11 @@
     -d, --destination PATH      Target location for file downloads
     -D, --directory PATH        Exact location for file downloads
     --restrict-filenames VALUE  Replace restricted filename characters with
-                                underscores. One of 'windows', 'unix', 'ascii',
-                                'ascii+', or a custom set of characters
+                                underscores. One of 'windows', 'windows+',
+                                'unix', 'ascii', 'ascii+', or a custom set of
+                                characters
     --windows-filenames         Force filenames to be Windows-compatible
     -X, --extractors PATH       Load external extractors from PATH
-    --clear-cache MODULE        Delete cached login sessions, cookies, etc. for
-                                MODULE (ALL to delete everything)
     --compat                    Restore legacy 'category' names
 
 ## Update Options:
@@ -109,34 +110,58 @@
     -r, --limit-rate RATE       Maximum download rate (e.g. 500k, 2.5M, or
                                 800k-2M)
     --chunk-size SIZE           Size of in-memory data chunks (default: 32k)
-    --sleep SECONDS             Number of seconds to wait before each download.
-                                This can be either a constant value or a range
-                                (e.g. 2.7 or 2.0-3.5)
-    --sleep-skip SECONDS        Number of seconds to wait after skipping a file
-                                download
-    --sleep-request SECONDS     Number of seconds to wait between HTTP requests
-                                during data extraction
-    --sleep-429 SECONDS         Number of seconds to wait when receiving a '429
-                                Too Many Requests' response
-    --sleep-extractor SECONDS   Number of seconds to wait before starting data
-                                extraction for an input URL
     --no-part                   Do not use .part files
     --no-skip                   Do not skip downloads; overwrite existing files
     --no-mtime                  Do not set file modification times according to
                                 Last-Modified HTTP response headers
     --no-download               Do not download any files
 
+## Sleep Options:
+    --sleep SECONDS             Number of seconds to wait before each download.
+                                This can be either a constant value or a range
+                                (e.g. 2.7 or 2.0-3.5)
+    --sleep-skip SECONDS        Number of seconds to wait after skipping a file
+                                download
+    --sleep-extractor SECONDS   Number of seconds to wait before starting data
+                                extraction for an input URL
+    --sleep-request SECONDS     Number of seconds to wait between HTTP requests
+                                during data extraction
+    --sleep-retries [TYPE=]SECONDS
+                                Number of seconds to wait before retrying an
+                                HTTP request. Can be prefixed with
+                                'lin[:START[:MAX]]' or
+                                'exp[:BASE[:START[:MAX]]]' for linear or
+                                exponential growth between consecutive retries
+                                (e.g. '30', 'exp=40', 'lin:20=30-60'
+    --sleep-429 [TYPE=]SECONDS  Number of seconds to wait when receiving a '429
+                                Too Many Requests' response
+
 ## Configuration Options:
     -o, --option KEY=VALUE      Additional options. Example: -o browser=firefox
-    -c, --config FILE           Additional configuration files
+    -c, --config FILE           Additional configuration files in default
+                                format
+    --config-json FILE          Additional configuration files in JSON format
     --config-yaml FILE          Additional configuration files in YAML format
     --config-toml FILE          Additional configuration files in TOML format
+    --config-type TYPE          Set filetype of default configuration files
+                                (json, yaml, toml)
+    --config-ignore             Do not load default configuration files
     --config-create             Create a basic configuration file
     --config-status             Show configuration file status
     --config-open               Open configuration file in external application
-    --config-type TYPE          Set filetype of default configuration files
-                                (json, yaml, toml)
-    --config-ignore             Do not read default configuration files
+
+## Cache Options:
+    --cache-file PATH           Use PATH as cache file
+    --cache-status              Show cache file information
+    --cache-show MODULE         Show cached values for MODULE (ALL to show all
+                                entries, EXP to show only expired entries, VAL
+                                to show only valid entries)
+    --cache-clear MODULE        Delete cached login sessions, cookies, etc. for
+                                MODULE (ALL to delete everything, EXP to delete
+                                only expired values)
+    --cache-vacuum              Clean up the cache database by removing unused
+                                space and reorganizing the data to improve
+                                performance
 
 ## Authentication Options:
     -u, --username USER         Username to login with
@@ -168,6 +193,28 @@
                                 500k or 2.5M)
     --download-archive FILE     Record successfully downloaded files in FILE
                                 and skip downloading any file already in it
+    --date-before DATE          Process only posts created before this date
+                                given in ISO 8601 format or as Unix timestamp
+                                (e.g. '2025-10-31', '2026-01-09T15:30:00',
+                                '1767972600')
+    --date-after DATE           Process only posts created after this date.
+                                Stop extraction when an older post is
+                                encountered
+    --blacklist CATEGORIES      Ignore the given comma-separated category names
+                                or category:subcategory pairs when spawning
+                                child extractors for external URLs (e.g.
+                                'pixiv', 'pixiv:user,*:artist')
+    --whitelist CATEGORIES      Allow only the given comma-separated category
+                                names or category:subcategory pairs to allow
+                                when spawning child extractors for external
+                                URLs
+    --tags-blacklist TAGS       Ignore posts tagged with any of the tags given
+                                as comma-separated list or path to a file
+                                containing them (e.g. '1girl',
+                                'shirt,highres,smile', 'C:\path\to\list.txt')
+    --tags-whitelist TAGS       Allow only posts tagged with at least one of
+                                the tags given as comma-separated list or path
+                                to a file containing them
     --range RANGE               Index range(s) specifying which files to
                                 download. These can be either a constant value,
                                 range, or slice (e.g. '5', '8-20', or '1:24:3')
@@ -206,8 +253,10 @@
                                 'vp8', 'vp9', 'vp9-lossless', 'copy', 'zip'.
     --exec CMD                  Execute CMD for each downloaded file. Supported
                                 replacement fields are {} or {_path},
-                                {_directory}, {_filename}. Example: --exec
-                                "convert {} {}.png && rm {}"
+                                {_temppath}, {_directory}, {_filename}. On
+                                Windows, use {_path_unc} or {_directory_unc}
+                                for UNC paths. Example: --exec "convert {}
+                                {}.png && rm {}"
     --exec-after CMD            Execute CMD after all files were downloaded.
                                 Example: --exec-after "cd {_directory} &&
                                 convert * ../doc.pdf"

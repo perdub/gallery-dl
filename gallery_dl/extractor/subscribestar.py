@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2025 Mike Fährmann
+# Copyright 2020-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://www.subscribestar.com/"""
 
 from .common import Extractor, Message
-from .. import text, util, exception
-from ..cache import cache
+from .. import text, util
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?subscribestar\.(com|adult)"
 
@@ -71,7 +70,7 @@ class SubscribestarExtractor(Extractor):
             if response.history and (
                     "/verify_subscriber" in response.url or
                     "/age_confirmation_warning" in response.url):
-                raise exception.AbortExtraction(
+                raise self.exc.AbortExtraction(
                     "HTTP redirect to " + response.url)
 
             content = response.content
@@ -89,15 +88,15 @@ class SubscribestarExtractor(Extractor):
 
         username, password = self._get_auth_info()
         if username:
-            self.cookies_update(self._login_impl(
-                (username, self.cookies_domain), password))
+            self.cookies_update(self.cache(
+                self._login_impl, (username, self.cookies_domain), password,
+                _exp=28*86400, _mem=False))
 
         if self._warning:
             if not username or not self.cookies_check(self.cookies_names):
                 self.log.warning("no '_personalization_id' cookie set")
             SubscribestarExtractor._warning = False
 
-    @cache(maxage=28*86400, keyarg=1)
     def _login_impl(self, username, password):
         username = username[0]
         self.log.info("Logging in as %s", username)
@@ -127,7 +126,7 @@ class SubscribestarExtractor(Extractor):
                     msg = f'"{errors.popitem()[1]}"'
                 except Exception:
                     msg = None
-                raise exception.AuthenticationError(msg)
+                raise self.exc.AuthenticationError(msg)
             return response
 
         # submit username / email

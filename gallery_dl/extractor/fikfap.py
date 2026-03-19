@@ -9,7 +9,7 @@
 """Extractors for https://fikfap.com/"""
 
 from .common import Extractor, Message
-from .. import text, exception
+from .. import text
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?fikfap\.com"
 
@@ -67,26 +67,23 @@ class FikfapExtractor(Extractor):
 
 class FikfapPostExtractor(FikfapExtractor):
     subcategory = "post"
-    pattern = BASE_PATTERN + r"/user/(\w+)/post/(\d+)"
+    pattern = BASE_PATTERN + r"/(?:user/[^/?#]+/)?post/(\d+)"
     example = "https://fikfap.com/user/USER/post/12345"
 
     def posts(self):
-        user, pid = self.groups
+        pid = self.groups[0]
 
-        url = f"{self.root_api}/profile/username/{user}/posts"
-        params = {"amount" : "1", "startId": pid}
-        posts = self.request_api(url, params)
+        url = f"{self.root_api}/posts/{pid}"
+        post = self.request_api(url, None)
 
-        pid = int(pid)
-        for post in posts:
-            if post["postId"] == pid:
-                return (post,)
-        raise exception.NotFoundError("post")
+        if post["postId"] == int(pid):
+            return (post,)
+        raise self.exc.NotFoundError("post")
 
 
 class FikfapUserExtractor(FikfapExtractor):
     subcategory = "user"
-    pattern = BASE_PATTERN + r"/user/([\w-]+)"
+    pattern = BASE_PATTERN + r"/user/([^/?#]+)"
     example = "https://fikfap.com/user/USER"
 
     def posts(self):
@@ -108,7 +105,7 @@ class FikfapUserExtractor(FikfapExtractor):
 class FikfapHashtagExtractor(FikfapExtractor):
     subcategory = "hashtag"
     directory_fmt = ("{category}", "{hashtag}")
-    pattern = BASE_PATTERN + r"/hash/([\w-]+)"
+    pattern = BASE_PATTERN + r"/hash/([^/?#]+)"
     example = "https://fikfap.com/hash/HASH"
 
     def posts(self):

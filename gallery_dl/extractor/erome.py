@@ -9,8 +9,7 @@
 """Extractors for https://www.erome.com/"""
 
 from .common import Extractor, Message
-from .. import text, util, exception
-from ..cache import cache
+from .. import text, util
 import itertools
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?erome\.com"
@@ -37,12 +36,13 @@ class EromeExtractor(Extractor):
     def request(self, url, **kwargs):
         if self._cookies:
             self._cookies = False
-            self.cookies.update(_cookie_cache())
+            self.cookies_update(self.cache(
+                _cookie_cache, _key=None, _mem=False))
 
         for _ in range(5):
             response = Extractor.request(self, url, **kwargs)
             if response.cookies:
-                _cookie_cache.update("", response.cookies)
+                self.cache_update(_cookie_cache, None, response.cookies)
             if response.content.find(
                     b"<title>Please wait a few moments</title>", 0, 600) < 0:
                 return response
@@ -74,12 +74,12 @@ class EromeAlbumExtractor(EromeExtractor):
 
         try:
             page = self.request(url).text
-        except exception.HttpError as exc:
+        except self.exc.HttpError as exc:
             if exc.status == 410:
                 msg = text.extr(exc.response.text, "<h1>", "<")
             else:
                 msg = "Unable to fetch album page"
-            raise exception.AbortExtraction(
+            raise self.exc.AbortExtraction(
                 f"{album_id}: {msg} ({exc})")
 
         title, pos = text.extract(
@@ -147,6 +147,5 @@ class EromeSearchExtractor(EromeExtractor):
         return self._pagination(url, params)
 
 
-@cache()
 def _cookie_cache():
     return ()

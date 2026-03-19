@@ -9,7 +9,7 @@
 """Extractors for https://members.luscious.net/"""
 
 from .common import Extractor, Message
-from .. import text, exception
+from .. import text
 
 
 class LusciousExtractor(Extractor):
@@ -32,7 +32,7 @@ class LusciousExtractor(Extractor):
 
         if response.status_code >= 400:
             self.log.debug("Server response: %s", response.text)
-            raise exception.AbortExtraction(
+            raise self.exc.AbortExtraction(
                 f"GraphQL query failed "
                 f"('{response.status_code} {response.reason}')")
 
@@ -69,9 +69,10 @@ class LusciousAlbumExtractor(LusciousExtractor):
             image["date"] = self.parse_timestamp(image["created"])
             image["id"] = text.parse_int(image["id"])
 
-            url = (image["url_to_original"] or image["url_to_video"]
-                   if self.gif else
-                   image["url_to_video"] or image["url_to_original"])
+            url = ((image["url_to_original"] or image["url_to_video"]
+                    if self.gif else
+                    image["url_to_video"] or image["url_to_original"]) or
+                   image["thumbnail"])
 
             yield Message.Url, url, text.nameext_from_url(url, image)
 
@@ -82,7 +83,7 @@ class LusciousAlbumExtractor(LusciousExtractor):
 
         album = self._request_graphql("AlbumGet", variables)["album"]["get"]
         if "errors" in album:
-            raise exception.NotFoundError("album")
+            raise self.exc.NotFoundError("album")
 
         album["audiences"] = [item["title"] for item in album["audiences"]]
         album["genres"] = [item["title"] for item in album["genres"]]

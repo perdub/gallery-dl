@@ -5,8 +5,7 @@
 # published by the Free Software Foundation.
 
 from .common import Extractor, Message
-from .. import text, exception
-from ..cache import cache
+from .. import text
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?girlswithmuscle\.com"
 
@@ -22,9 +21,10 @@ class GirlswithmuscleExtractor(Extractor):
     def login(self):
         username, password = self._get_auth_info()
         if username:
-            self.cookies_update(self._login_impl(username, password))
+            return self.cookies_update(self.cache(
+                self._login_impl, username, password,
+                _exp=14*86400, _mem=False))
 
-    @cache(maxage=14*86400, keyarg=1)
     def _login_impl(self, username, password):
         self.log.info("Logging in as %s", username)
 
@@ -46,13 +46,13 @@ class GirlswithmuscleExtractor(Extractor):
             url, method="POST", headers=headers, data=data)
 
         if not response.history:
-            raise exception.AuthenticationError()
+            raise self.exc.AuthenticationError()
 
         page = response.text
         if ">Wrong username or password" in page:
-            raise exception.AuthenticationError()
+            raise self.exc.AuthenticationError()
         if ">Log in<" in page:
-            raise exception.AuthenticationError("Account data is missing")
+            raise self.exc.AuthenticationError("Account data is missing")
 
         return {c.name: c.value for c in response.history[0].cookies}
 
@@ -69,7 +69,7 @@ class GirlswithmusclePostExtractor(GirlswithmuscleExtractor):
         url = f"{self.root}/{self.groups[0]}/"
         page = self.request(url).text
         if not page:
-            raise exception.NotFoundError("post")
+            raise self.exc.NotFoundError("post")
 
         metadata = self.metadata(page)
 
@@ -152,7 +152,7 @@ class GirlswithmuscleSearchExtractor(GirlswithmuscleExtractor):
         response = self.request(url)
         if response.history:
             msg = f'Request was redirected to "{response.url}", try logging in'
-            raise exception.AuthorizationError(msg)
+            raise self.exc.AuthorizationError(msg)
         page = response.text
 
         match = text.re(r"Page (\d+) of (\d+)").search(page)

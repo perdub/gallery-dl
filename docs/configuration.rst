@@ -21,6 +21,8 @@ Contents
 5) `Postprocessor Options`_
 6) `Miscellaneous Options`_
 7) `API Tokens & IDs`_
+8) `Custom Types`_
+
 
 
 Extractor Options
@@ -232,9 +234,10 @@ Type
     ``bool``
 Default
     ``true``
-        ``[chevereto]`` |
-        ``erome``       |
-        ``[imagehost]``
+        ``[chevereto]``  |
+        ``erome``        |
+        ``[imagehost]``  |
+        ``urlgalleries``
     ``false``
         otherwise
 Description
@@ -336,6 +339,9 @@ Special Values
     ``"windows"``
         | ``"\\\\|/<>:\"?*"``
         | (https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file)
+    ``"windows+"``
+        | ``{"\\": "⧹", "|" : "", "/" : "⧸", "<" : "＜", ">" : "＞", ":" : "：", "\"" : "＂", "?" : "？", "*" : "＊"}``
+        | (replace characters not allowed by Windows with Unicode alternatives)
     ``"ascii"``
         | ``"^0-9A-Za-z_."``
         | (only ASCII digits, letters, underscores, and dots)
@@ -537,15 +543,48 @@ Description
     i.e. before starting a new extractor.
 
 
+extractor.*.sleep-retries
+-------------------------
+Type
+    |Duration+|_
+Default
+    ``"lin=1"``
+Example
+    * ``"30-50"``
+    * ``"exp=40"``
+    * ``"lin:20=30-60"``
+Description
+    Number of seconds to sleep before
+    `retrying <extractor.*.retries_>`__
+    an HTTP request.
+
+    If this is a ``string``, its |Duration|_ value can be prefixed with
+    ``lin[:START[:MAX]]`` for `linear` or
+    ``exp[:BASE[:START[:MAX]]]`` for `exponential` growth.
+Note
+    | ``lin`` and ``exp`` can be any starting characters of
+      ``linear`` and ``exponential``.
+    | For example ``l``, ``li``, ``lin``, ``line``, ``linea``, or ``linear``.
+
+
 extractor.*.sleep-429
 ---------------------
 Type
-    |Duration|_
+    |Duration+|_
 Default
     ``60``
+Example
+    * ``"30-50"``
+    * ``"e=40"``
+    * ``"linear:20=30-60"``
 Description
-    Number of seconds to sleep when receiving a `429 Too Many Requests`
+    Number of seconds to sleep when receiving a
+    `429 Too Many Requests <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429>`__
     response before `retrying <extractor.*.retries_>`__ the request.
+
+    If this is a ``string``, its |Duration|_ value can be prefixed with
+    ``lin[:START[:MAX]]`` for `linear` or
+    ``exp[:BASE[:START[:MAX]]]`` for `exponential` backoff.
 
 
 extractor.*.sleep-request
@@ -882,7 +921,7 @@ Default
         * ``[E621]``
     ``"net.umanle.arca.android.playstore/0.9.75"``
         * ``arcalive``
-    ``"Patreon/72.2.28 (Android; Android 14; Scale/2.10)"``
+    ``"Patreon/126.9.0.15 (Android; Android 14; Scale/2.10)"``
         * ``patreon``
     ``"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/LATEST.0.0.0 Safari/537.36"``
         * ``instagram``
@@ -924,6 +963,7 @@ Default
         ``artstation`` |
         ``behance``    |
         ``fanbox``     |
+        ``simplyhentai`` |
         ``twitter``    |
         ``vsco``
     ``null``
@@ -973,6 +1013,7 @@ Default
         ``4chanarchives`` |
         ``archivedmoe``   |
         ``nsfwalbum``     |
+        ``pholder``       |
         ``tumblrgallery``
     ``true``
         otherwise
@@ -1248,11 +1289,38 @@ Note
     ``"oauth"``, ``"recursive"``, and ``"test"``.
 
 
+.. _extractor.*.blacklist-tags:
+.. _extractor.*.whitelist-tags:
+
+extractor.*.tags-blacklist & .tags-whitelist
+--------------------------------------------
+Type
+    * |Path|_
+    * ``string``
+    * ``list`` of ``strings``
+Example
+    * ``"/path/to/file.txt"``
+    * ``"1girl,long_hair,  highres,commentary_request"``
+    * ``["1girl", "long_hair", "highres", "commentary_request"]``
+Description
+    A list of tags to exclude/include for processed posts.
+
+    Posts containing a blacklisted tag or *not* containing any whitelisted tag
+    and all of their files will be ignored and not processed any further.
+
+    This can be
+
+    * The |Path|_ of a plaintext file
+      containing black-/whitelisted tag names separated by newlines
+    * A ``string`` with tag names separated by commas (``"tag1,tag2,tag3"``)
+    * A ``list`` of ``string`` tag names (``["tag1", "tag2", "tag3"]``)
+
+
 extractor.*.archive
 -------------------
 Type
     * ``string``
-    * |Path|_
+    * |Path+|_
 Default
     ``null``
 Example
@@ -1687,30 +1755,35 @@ Description
     but applies to delegated URLs like manga chapters, etc.
 
 
-extractor.*.date-format
+extractor.*.date-before
 -----------------------
 Type
-    ``string``
+    |Date|_
+Default
+    ``null``
+Example
+    * ``"2025-10-31"``
+    * ``"2026-01-09 15:30:00"``
+    * ``"2026-01-09T15:30:00Z"``
+    * ``1767972600``
+Description
+    Process only posts created `before` this |Date|_.
+
+    Accepted values are |ISO 8601| dates and Unix timestamps.
+
+
+extractor.*.date-after
+----------------------
+Type
+    |Date|_
 Default
     ``null``
 Description
-    Format string used to parse ``string`` values of
-    `date-min` and `date-max`.
+    | Process only posts created `after` this |Date|_.
+    | Stop extraction when encountering
+      a post created before or equal to this |Date|_.
 
-    See |strptime|_ for a list of formatting directives.
-Special Values
-    ``null``
-        | Parse `date-min` and `date-max` according to
-          `ISO 8601 <https://en.wikipedia.org/wiki/ISO_8601>`__
-        | See
-          `datetime.fromisoformat() <https://docs.python.org/3/library/datetime.html#datetime.datetime.fromisoformat>`__
-          for details and examples.
-Note
-    Despite its name, this option does **not** control how
-    ``{date}`` metadata fields are formatted.
-    To use a different formatting for those values other than the default
-    ``%Y-%m-%d %H:%M:%S``, put |strptime|_ formatting directives
-    after a colon ``:``, for example ``{date:%Y%m%d}``.
+    Accepted values are |ISO 8601| dates and Unix timestamps.
 
 
 extractor.*.write-pages
@@ -2422,6 +2495,20 @@ Description
     |ISO 639-1| code(s) to filter chapters by.
 
 
+extractor.coomer.files
+----------------------
+Type
+    ``list`` of ``strings``
+Default
+    ``["file", "attachments", "inline"]``
+Description
+    Determines the type and order of files to be downloaded.
+Available Types
+    * ``file``
+    * ``attachments``
+    * ``inline``
+
+
 extractor.cyberdrop.domain
 --------------------------
 Type
@@ -2779,13 +2866,19 @@ Type
     * ``bool``
     * ``string``
 Default
-    ``true``
+    ``false``
 Description
     Download original files if available.
 
     Setting this option to ``"images"`` only downloads original
     files if they are images and falls back to preview versions for
     everything else (archives, videos, etc.).
+Note
+    https://www.deviantart.com/team/status-update/An-adjustments-being-made-to-1307747979 ::
+
+    > The New Weekly Limits:
+    >   Non-Core & Core Basic:  10 downloads per week
+    >   Core+ and higher     : 150 downloads per week
 
 
 extractor.deviantart.pagination
@@ -3408,6 +3501,63 @@ Description
       ``"l"``, ...) to use as an upper limit.
 
 
+extractor.foriio.audio
+----------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Download embedded audio files using |ytdl|
+    in ``sound`` works
+
+
+extractor.foriio.external
+-------------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Follow external URLs
+    in ``web_article`` works
+
+
+extractor.foriio.user.posts
+---------------------------
+Type
+    * ``string``
+    * ``list`` of ``strings``
+Default
+    ``null``
+Example
+    * ``"image,video,sound"``
+    * ``["web_article", "copy_writing"]``
+Description
+    Only process works of the given types.
+
+
+extractor.foriio.previews
+-------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Download preview images of embedded media.
+
+
+extractor.foriio.videos
+-----------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Download embedded (YouTube) videos using |ytdl|
+    in ``video`` works
+
+
 extractor.furaffinity.descriptions
 ----------------------------------
 Type
@@ -3865,6 +4015,56 @@ Description
     Download video previews.
 
 
+extractor.instagram.static-videos
+---------------------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Download static story/highlight "videos" generated from a photo.
+
+    Disabling this option downloads the photo version instead.
+
+
+extractor.instagram.user-cache
+------------------------------
+Type
+    * ``bool``
+    * ``string``
+Default
+    ``"disk"``
+Description
+    Selects how to cache user profile data.
+
+    ``true`` | ``"disk"``
+        Cache user data on disk
+    ``false`` | ``"memory"``
+        Cache user data in memory
+
+
+extractor.instagram.user-strategy
+---------------------------------
+Type
+    * ``string``
+    * ``list`` of ``strings``
+Default
+    ``["search", "web"]``
+Example
+    * ``"web,info,search"``
+    * ``["web", "info", "search"]``
+Description
+    Selects how to retrieve user IDs and profile data.
+
+    ``"search"`` | ``"topsearch"``
+        Use `topsearch` API results
+    ``"info"`` | ``"web_profile_info"``
+        | Use `web_profile_info` API results
+        | (high liklyhood of ``429 Too Many Requests`` errors)
+    ``"web"`` | ``"webpage"``
+        Extract minimal user information from profile webpage
+
+
 extractor.instagram.videos
 --------------------------
 Type
@@ -3977,6 +4177,21 @@ Description
     Download video files.
 
 
+extractor.iwara.format
+----------------------
+Type
+    * ``string``
+    * ``list`` of ``strings``
+Example
+    * ``"Source"``
+    * ``"360,540,Source"``
+    * ``["360", "540", "Source"]``
+Description
+    Selects the preferred format for video downloads.
+
+    When more than one format is given, the first available one is selected.
+
+
 extractor.iwara.include
 -----------------------
 Type
@@ -3995,6 +4210,53 @@ Note
     It is possible to use ``"all"`` instead of listing all values separately.
 
 
+extractor.joyreactor.embeds
+---------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Downlload embedded external videos with |ytdl|.
+
+
+extractor.joyreactor.formats
+----------------------------
+Type
+    * ``string``
+    * ``list`` of ``strings``
+Default
+    ``["webm"]``
+Example
+    ``"gif,mp4,webm"``
+Description
+    A (comma-separated) list of video formats to download.
+Supported Values
+    * ``webm``
+    * ``mp4``
+    * ``gif``
+
+
+extractor.joyreactor.metadata
+-----------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Extract additional metadata.
+
+
+extractor.joyreactor.videos
+---------------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Download videos.
+
+
 extractor.kemono.archives
 -------------------------
 Type
@@ -4006,6 +4268,23 @@ Description
     ``file``, ``file_list``, and ``password``.
 Note
     This requires 1 additional HTTP request per ``archives`` file.
+
+
+extractor.kemono.archives-format
+--------------------------------
+Type
+    ``string``
+Default
+    ``"list"``
+Description
+    Determines the format/type of the
+    `archives <extractor.kemono.archives_>`__
+    metadata field.
+
+    ``"list"`` | ``"array"``
+        Plain ``list`` with archive files as elements
+    ``"dict"`` | ``"object"``
+        A ``dict`` with each archive file's ``hash`` as key.
 
 
 extractor.kemono.comments
@@ -4300,6 +4579,16 @@ Example
     * ``["erotica", "suggestive"]``
 Description
     List of acceptable content ratings for returned chapters.
+
+
+extractor.mangadex.manga.covers
+-------------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Download `manga` `cover` images.
 
 
 extractor.mangafire.manga.lang
@@ -5440,7 +5729,10 @@ extractor.reddit.user.only
 Type
     ``bool``
 Default
-    ``trur``
+    ``user-saved`` | ``user-upvoted`` | ``user-downvoted``
+        ``false``
+    otherwise
+        ``true``
 Description
     Only process and return posts from the user specified in the input URL.
 
@@ -6528,7 +6820,7 @@ Supported Values
     * ``timeline``
     * ``tweets``
     * ``media``
-    * ``replies``
+    * ``with-replies``
     * ``highlights``
     * ``likes``
 Note
@@ -6636,6 +6928,16 @@ Default
     ``false``
 Description
     Fetch media from pinned Tweets.
+
+
+extractor.twitter.previews
+--------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Download video previews.
 
 
 extractor.twitter.quoted
@@ -6755,7 +7057,7 @@ extractor.twitter.search-pagination
 Type
     ``string``
 Default
-    ``"cursor"``
+    ``"max_id"``
 Description
     Selects how to paginate over search results.
 
@@ -7355,6 +7657,16 @@ Description
         Descending order (newest first)
     ``"reaction"`` | ``"score"``
         Reaction Score order (``threads`` only)
+
+
+extractor.[xenforo].quoted
+--------------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Extract files from quoted content.
 
 
 extractor.ytdl.cmdline-args
@@ -8175,7 +8487,8 @@ Description
 output.colors
 -------------
 Type
-    ``object`` (`key` → `ANSI color`)
+    * ``bool``
+    * ``object`` (`key` → `ANSI color`)
 Default
     .. code:: json
 
@@ -8190,20 +8503,27 @@ Default
 
 Description
     Controls the
-    `ANSI colors <https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797#colors--graphics-mode>`__
+    `ANSI colors <https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797#color-codes>`__
     used for various outputs.
 
-    Output for |mode: color|__
+    ``true``
+        Use default ANSI colors.
+    ``false``
+        Disable ANSI colors.
+    ``object``
+        Use custom ANSI colors.
 
-    * ``success``: successfully downloaded files
-    * ``skip``: skipped files
+        Keys for |mode: color|__
 
-    Logging Messages:
+        * ``success``: successfully downloaded files
+        * ``skip``: skipped files
 
-    * ``debug``: debug logging messages
-    * ``info``: info logging messages
-    * ``warning``: warning logging messages
-    * ``error``: error logging messages
+        Keys for Logging Messages
+
+        * ``debug``: debug logging messages
+        * ``info``: info logging messages
+        * ``warning``: warning logging messages
+        * ``error``: error logging messages
 
 .. __: `output.mode`_
 
@@ -8217,6 +8537,8 @@ Default
 Description
     | On Windows, enable ANSI escape sequences and colored output
     | by setting the ``ENABLE_VIRTUAL_TERMINAL_PROCESSING`` flag for stdout and stderr.
+Note
+    To disable colored output, set `output.colors`_ to ``false``.
 
 
 output.skip
@@ -8361,6 +8683,30 @@ and `event <exec.event_>`__ field:
         "command": "...",
         "event"  : "after"
     }
+
+
+actions.action
+--------------
+Type
+    `Action(s)`_
+Description
+    The `Action(s)`_ to perform.
+Note
+    This option can also be set as ``mode``,
+    making it possible to use ``"name": "actions/<action>@<event>"``
+
+
+actions.event
+-------------
+Type
+    * ``string``
+    * ``list`` of ``strings``
+Default
+    ``"prepare"``
+Description
+    The event(s) for which `actions.action`_ is triggered.
+
+    See `metadata.event`_ for a list of available events.
 
 
 classify.mapping
@@ -8532,6 +8878,16 @@ Description
     See `metadata.event`_ for a list of available events.
 
 
+exec.output
+-----------
+Type
+    ``boolean``
+Default
+    ``true``
+Description
+    Show output of spawned subprocesses.
+
+
 exec.session
 ------------
 Type
@@ -8561,6 +8917,24 @@ Default
 Description
     Include `command <exec.command_>`__
     arguments in logging messages.
+
+
+exec.success
+------------
+Type
+    `Action(s)`_
+Description
+    Run these `Action(s)`_ when `command <exec.command_>`__
+    succeeds and returns with exit status `0`.
+
+
+exec.error
+----------
+Type
+    `Action(s)`_
+Description
+    Run these `Action(s)`_ when `command <exec.command_>`__
+    fails and returns with a non-zero exit status.
 
 
 hash.chunk-size
@@ -8640,6 +9014,9 @@ Description
     * If this is an ``object``,
       it is a ``<field name>`` to ``<algorithm name>`` mapping
       for hash digests to compute.
+Note
+    This option can also be set as ``mode``,
+    making it possible to use ``"name": "hash/<fieldname>@<event>"``
 
 
 metadata.mode
@@ -9065,7 +9442,7 @@ Default
 Description
     Name of the metadata field whose value should be used.
 
-    This value must be either a UNIX timestamp or a
+    This value must be either a Unix timestamp or a
     |type-datetime|_ object.
 Note
     This option is ignored if `mtime.value`_ is set.
@@ -9083,7 +9460,7 @@ Example
 Description
     The `Format String`_ whose value should be used.
 
-    The resulting value must be either a UNIX timestamp or a
+    The resulting value must be either a Unix timestamp or a
     |type-datetime|_ object.
 Note:
     Unlike standard `Format Strings`_, replacement fields here
@@ -9257,6 +9634,18 @@ Description
     Location of the ``ffmpeg`` (or ``avconv``) executable to use.
 
 
+ugoira.mkvmerge-args
+--------------------
+Type
+    ``list`` of ``strings``
+Default
+    ``null``
+Example
+    ``["--no-date", "--disable-lacing"]``
+Description
+    Additional ``mkvmerge`` command-line arguments.
+
+
 ugoira.mkvmerge-location
 ------------------------
 Type
@@ -9266,6 +9655,41 @@ Default
 Description
     Location of the ``mkvmerge`` executable for use with the
     `mkvmerge demuxer <ugoira.ffmpeg-demuxer_>`__.
+
+
+ugoira.mkvmerge-metadata
+------------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Let ``mkvmerge`` write ``BPS``, ``DURATION``, ``NUMBER_OF_BYTES``,
+    and ``NUMBER_OF_FRAMES`` metadata tags.
+Implementation Detail
+    Disabling this option passes
+    ``--disable-track-statistics-tags`` to ``mkvmerge``
+
+
+ugoira.mkvmerge-mtime
+---------------------
+Type
+    ``bool``
+Default
+    ``true``
+Description
+    Set the `date` segment information field
+    of files processed with ``mkvmerge``.
+
+
+ugoira.mkvmerge-output
+----------------------
+Type
+    ``bool``
+Default
+    ``false``
+Description
+    Enable ``mkvmerge`` output.
 
 
 ugoira.ffmpeg-output
@@ -9369,7 +9793,7 @@ Type
 Default
     ``true``
 Description
-    Set modification times of generated ugoira aniomations.
+    Set modification times of generated ugoira animations.
 
 
 ugoira.repeat-last-frame
@@ -9637,8 +10061,8 @@ Description
     Path of the SQLite3 database used to cache login sessions,
     cookies and API tokens across `gallery-dl` invocations.
 
-    Set this option to ``null`` or an invalid path to disable
-    this cache.
+    Set this option to ``":memory:"``, ``null``, or an invalid path
+    to disable creating a file for this cache.
 
 
 filters-environment
@@ -9902,13 +10326,14 @@ Type
     * ``string``
     * ``integer``
 Example
-    * ``"2019-01-01T00:00:00"``
-    * ``"2019"`` with ``"%Y"`` as `date-format`_
+    * ``"2019-01-01"``
+    * ``"2019-01-01 03:00:00"``
+    * ``"2019-03-08T12:30:00Z"``
     * ``1546297200``
 Description
     A |Date|_ value represents a specific point in time.
 
-    * If given as ``string``, it is parsed according to `date-format`_.
+    * If given as ``string``, it is parsed according to |ISO 8601|.
     * If given as ``integer``, it is interpreted as UTC timestamp.
 
 
@@ -9931,6 +10356,24 @@ Description
       (see `random.uniform() <https://docs.python.org/3/library/random.html#random.uniform>`_)
     * If given as a ``string``, it can either represent a single ``float``
       value (``"2.85"``) or a range  (``"1.5-3.0"``).
+
+
+Duration+
+---------
+Type
+    * |Duration|_
+    * ``string``
+Example
+    * ``"1.5-3.0"``
+    * ``"lin=5"``
+    * ``"lin:20=30-60"``
+    * ``"exp:1.8=40"``
+Description
+    A |Duration|_ value.
+
+    When given as ``string``, it can optionally be prefixed with
+    ``lin[:START[:MAX]]=`` for `linear` or
+    ``exp[:BASE[:START[:MAX]]]=`` for `exponential` growth.
 
 
 Module
@@ -9963,16 +10406,15 @@ Description
 Path
 ----
 Type
-    * ``string``
-    * ``list`` of ``strings``
+    ``string``
 Example
     * ``"file.ext"``
     * ``"~/path/to/file.ext"``
     * ``"$HOME/path/to/file.ext"``
-    * ``["$HOME", "path", "to", "file.ext"]``
+    * ``"C:\\path\\to\\file.ext"``
 Description
-    A |Path|_ is a ``string`` representing the location of a file
-    or directory.
+    A |Path|_ is a ``string`` representing the location
+    of a file or directory.
 
     Simple `tilde expansion <https://docs.python.org/3/library/os.path.html#os.path.expanduser>`__
     and `environment variable expansion <https://docs.python.org/3/library/os.path.html#os.path.expandvars>`__
@@ -9991,6 +10433,48 @@ Note
     * ``"C:/path/to/file.ext"`` when using forward slashes
 
     in a JSON file.
+
+
+Path+
+-----
+Type
+    * |Path|_
+    * ``list`` of `Format Strings`_
+Example
+    * ``"file.ext"``
+    * ``[":b", "{category}", "{user}.sqlite3"]``
+    * ``[":~", "gdl", "{category}", "{user}.sqlite3"]``
+    * ``[":$HOME", "gdl", "{category}", "{user}.sqlite3"]``
+    * ``["/opt", "archives", "{category}", "{user}.sqlite3"]``
+    * ``["C:", "archives", "{category}", "{user}.sqlite3"]``
+    * ``["\\\\server\\archives", "{category}", "{user}.sqlite3"]``
+Description
+    A |Path|_ that supports
+    `path-restricted <extractor.*.path-restrict_>`__
+    `Format String`_ expansion
+    when given as a ``list`` of ``string`` values.
+
+    Use a string starting with ``:`` as first list element
+    to prefix the path with one of the following:
+
+    ``":"`` | ``":b"`` | ``":base"``
+        `base-directory <extractor.*.base-directory_>`__
+    ``":d"`` | ``":dir"``
+        `base-directory <extractor.*.base-directory_>`__ +
+        `directory <extractor.*.directory_>`__
+    ``":~"`` | ``":~USER"``
+        home directory
+        (`os.path.expanduser <https://docs.python.org/3/library/os.path.html#os.path.expanduser>`__)
+    ``":$ENV"`` (``$`` + environment variable name)
+        value of environment variable
+
+    Use ``<drive-letter>:`` or ``\\`` on Windows
+    or ``/`` on other platforms
+    as starting characters of the first list element
+    to interpret this as an absolute path.
+
+    Otherwise it is interpreted as a path
+    relative to the current working directory.
 
 
 Logging Configuration
@@ -10124,8 +10608,10 @@ Description
         * ``"name": "ugoira/archive"``
         * ``"name": "exec@error"``
 
-    The available post-processor types are
+    Available postprocessor types are
 
+    ``actions``
+        Perform `Action(s)`_
     ``classify``
         Categorize files by filename extension
     ``compare``
@@ -10160,6 +10646,7 @@ Example
     * ``"print Hello World"``
     * ``"raise AbortExtraction an error occured"``
     * ``"flag file = terminate"``
+    * ``"keyword title Hello World"``
     * ``["print Exiting", "exit 1"]``
 Description
     An Action_ is parsed as `Action Type`
@@ -10208,6 +10695,8 @@ Description
         | Expected syntax is ``<flag>[ = <value>]`` (e.g. ``post = stop``)
         | ``<flag>`` can be one of ``file``, ``post``, ``child``, ``download``
         | ``<value>`` can be one of ``stop``, ``abort``, ``terminate``, ``restart``, ``skip`` (default ``stop``)
+    ``keyword``:
+        Set a `keyword <extractor.*.keywords_>`__ value
     ``wait``:
         | Sleep for a given Duration_ or
         | wait until Enter is pressed when no argument was given.
@@ -10284,8 +10773,10 @@ Reference
 .. |datetime.max| replace:: ``datetime.max``
 .. |Date| replace:: ``Date``
 .. |Duration| replace:: ``Duration``
+.. |Duration+| replace:: ``Duration+``
 .. |Module| replace:: ``Module``
 .. |Path| replace:: ``Path``
+.. |Path+| replace:: ``Path+``
 .. |Last-Modified| replace:: ``Last-Modified``
 .. |Logging Configuration| replace:: ``Logging Configuration``
 .. |Postprocessor Configuration| replace:: ``Postprocessor Configuration``
@@ -10295,11 +10786,10 @@ Reference
 .. |open()| replace:: the built-in ``open()`` function
 .. |json.dump()| replace:: ``json.dump()``
 .. |ISO 639-1| replace:: `ISO 639-1 <https://en.wikipedia.org/wiki/ISO_639-1>`__ language
-.. |ISO 8601| replace:: `ISO 8601 <https://en.wikipedia.org/wiki/ISO_8601>`__ language
+.. |ISO 8601| replace:: `ISO 8601 <https://en.wikipedia.org/wiki/ISO_8601>`__
 
 .. _directory: `extractor.*.directory`_
 .. _base-directory: `extractor.*.base-directory`_
-.. _date-format: `extractor.*.date-format`_
 .. _deviantart.metadata: `extractor.deviantart.metadata`_
 .. _deviantart.comments: `extractor.deviantart.comments`_
 .. _postprocessors: `extractor.*.postprocessors`_

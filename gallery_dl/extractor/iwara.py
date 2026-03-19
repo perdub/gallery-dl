@@ -7,11 +7,10 @@
 """Extractors for https://www.iwara.tv/"""
 
 from .common import Extractor, Message, Dispatch
-from .. import text, util, exception
-from ..cache import cache, memcache
+from .. import text, util
 import hashlib
 
-BASE_PATTERN = r"(?:https?://)?(?:www\.)?iwara\.tv"
+BASE_PATTERN = r"(?:https?://)?(?:www\.)?iwara\.(tv|ai)"
 USER_PATTERN = BASE_PATTERN + r"/profile/([^/?#]+)"
 
 
@@ -24,7 +23,16 @@ class IwaraExtractor(Extractor):
     archive_fmt = "{type} {user[name]} {id} {file_id}"
 
     def _init(self):
+        self.root = "https://www.iwara." + self.groups[0]
         self.api = IwaraAPI(self)
+
+        if fmts := self.config("format"):
+            if isinstance(fmts, str):
+                fmts = fmts.replace(" ", "").lower().split(",")
+            elif not isinstance(fmts, (list, tuple)):
+                fmts = (str(fmts),)
+            self.formats = fmts
+            self.extract_video_source = self.extract_video_source_custom
 
     def items_image(self, images, user=None):
         for image in images:
@@ -63,17 +71,18 @@ class IwaraExtractor(Extractor):
                 if "fileUrl" not in video:
                     video = self.api.video(video["id"])
                 file_url = video["fileUrl"]
-                sources = self.api.source(file_url)
-                source = next((s for s in sources
-                              if s.get("name") == "Source"), None)
-                download_url = source.get('src', {}).get('download')
+
+                source = self.extract_video_source(self.api.source(file_url))
+                download_url = source["src"].get("download")
 
                 info = self.extract_media_info(video, "file")
+                info["format"] = source.get("name")
                 info["count"] = info["num"] = 1
                 info["user"] = (self.extract_user_info(video)
                                 if user is None else user)
             except Exception as exc:
                 self.status |= 1
+                self.log.traceback(exc)
                 self.log.error("Failed to process video %s (%s: %s)",
                                video["id"], exc.__class__.__name__, exc)
                 continue
@@ -100,7 +109,7 @@ class IwaraExtractor(Extractor):
         if type == "user":
             return self.items_user(results)
 
-        raise exception.AbortExtraction(f"Unsupported result type '{type}'")
+        raise self.exc.AbortExtraction(f"Unsupported result type '{type}'")
 
     def extract_media_info(self, item, key, include_file_info=True):
         info = {
@@ -148,12 +157,33 @@ class IwaraExtractor(Extractor):
             "description": profile.get("body"),
         }
 
+    def extract_video_source(self, sources):
+        sources.sort(key=self._sort_formats, reverse=True)
+        return sources[0]
+
+    def extract_video_source_custom(self, sources):
+        fmts = {
+            name.lower(): source
+            for source in sources
+            if source.get("src") and (name := source.get("name"))
+        }
+
+        for fmt in self.formats:
+            if fmt in fmts:
+                return fmts[fmt]
+        self.log.warning("Requested format(s) not available")
+
     def _user_params(self):
-        user, qs = self.groups
+        _, user, qs = self.groups
         params = text.parse_query(qs)
-        profile = self.api.profile(user)
+        profile = self.cache(self.api.profile, user)
         params["user"] = profile["user"]["id"]
         return self.extract_user_info(profile), params
+
+    def _sort_formats(self, fmt):
+        return (0 if not fmt.get("src") else
+                99999 if (name := fmt.get("name")) == "Source" else
+                text.parse_int(name))
 
 
 class IwaraUserExtractor(Dispatch, IwaraExtractor):
@@ -162,7 +192,8 @@ class IwaraUserExtractor(Dispatch, IwaraExtractor):
     example = "https://www.iwara.tv/profile/USERNAME"
 
     def items(self):
-        base = f"{self.root}/profile/{self.groups[0]}/"
+        tld, user = self.groups
+        base = f"{self.root[:-2]}{tld}/profile/{user}/"
         return self._dispatch_extractors((
             (IwaraUserImagesExtractor   , base + "images"),
             (IwaraUserVideosExtractor   , base + "videos"),
@@ -211,7 +242,7 @@ class IwaraFollowingExtractor(IwaraExtractor):
     example = "https://www.iwara.tv/profile/USERNAME/following"
 
     def items(self):
-        uid = self.api.profile(self.groups[0])["user"]["id"]
+        uid = self.cache(self.api.profile, self.groups[1])["user"]["id"]
         return self.items_user(self.api.user_following(uid), "user")
 
 
@@ -221,7 +252,7 @@ class IwaraFollowersExtractor(IwaraExtractor):
     example = "https://www.iwara.tv/profile/USERNAME/followers"
 
     def items(self):
-        uid = self.api.profile(self.groups[0])["user"]["id"]
+        uid = self.cache(self.api.profile, self.groups[1])["user"]["id"]
         return self.items_user(self.api.user_followers(uid), "follower")
 
 
@@ -232,7 +263,7 @@ class IwaraImageExtractor(IwaraExtractor):
     example = "https://www.iwara.tv/image/ID"
 
     def items(self):
-        return self.items_image((self.api.image(self.groups[0]),))
+        return self.items_image((self.api.image(self.groups[1]),))
 
 
 class IwaraVideoExtractor(IwaraExtractor):
@@ -242,7 +273,7 @@ class IwaraVideoExtractor(IwaraExtractor):
     example = "https://www.iwara.tv/video/ID"
 
     def items(self):
-        return self.items_video((self.api.video(self.groups[0]),))
+        return self.items_video((self.api.video(self.groups[1]),))
 
 
 class IwaraPlaylistExtractor(IwaraExtractor):
@@ -252,7 +283,7 @@ class IwaraPlaylistExtractor(IwaraExtractor):
     example = "https://www.iwara.tv/playlist/ID"
 
     def items(self):
-        return self.items_video(self.api.playlist(self.groups[0]))
+        return self.items_video(self.api.playlist(self.groups[1]))
 
 
 class IwaraFavoriteExtractor(IwaraExtractor):
@@ -261,7 +292,7 @@ class IwaraFavoriteExtractor(IwaraExtractor):
     example = "https://www.iwara.tv/favorites/videos"
 
     def items(self):
-        type = self.groups[0] or "vidoo"
+        type = self.groups[1] or "vidoo"
         return self.items_by_type(type, self.api.favorites(type))
 
 
@@ -272,10 +303,12 @@ class IwaraSearchExtractor(IwaraExtractor):
     example = "https://www.iwara.tv/search?query=QUERY&type=TYPE"
 
     def items(self):
-        params = text.parse_query(self.groups[0])
-        type = params.get("type")
+        params = text.parse_query(self.groups[1])
+        type = params.get("type") or "videos"
+        if type[-1] != "s":
+            type += "s"
         self.kwdict["search_tags"] = query = params.get("query")
-        return self.items_by_type(type, self.api.search(type, query))
+        return self.items_by_type(type[:-1], self.api.search(type, query))
 
 
 class IwaraTagExtractor(IwaraExtractor):
@@ -285,7 +318,7 @@ class IwaraTagExtractor(IwaraExtractor):
     example = "https://www.iwara.tv/videos?tags=TAGS"
 
     def items(self):
-        type, qs = self.groups
+        _, type, qs = self.groups
         params = text.parse_query(qs)
         self.kwdict["search_tags"] = params.get("tags")
         return self.items_by_type(type, self.api.media(type, params))
@@ -293,14 +326,16 @@ class IwaraTagExtractor(IwaraExtractor):
 
 class IwaraAPI():
     """Interface for the Iwara API"""
-    root = "https://api.iwara.tv"
+    root = "https://apiq.iwara.tv"
 
     def __init__(self, extractor):
         self.extractor = extractor
+        self.exc = extractor.exc
         self.headers = {
             "Referer"     : extractor.root + "/",
             "Content-Type": "application/json",
             "Origin"      : extractor.root,
+            "X-Site"      : extractor.root[8:],
         }
 
         self.username, self.password = extractor._get_auth_info()
@@ -344,7 +379,7 @@ class IwaraAPI():
 
     def favorites(self, type):
         if not self.username:
-            raise exception.AuthRequired(
+            raise self.exc.AuthRequired(
                 "username & password", "your favorites")
         endpoint = f"/favorites/{type}s"
         return self._pagination(endpoint)
@@ -354,7 +389,6 @@ class IwaraAPI():
         params = {"type": type, "query": query}
         return self._pagination(endpoint, params)
 
-    @memcache(keyarg=1)
     def profile(self, username):
         endpoint = "/profile/" + username
         return self._call(endpoint)
@@ -372,18 +406,19 @@ class IwaraAPI():
         if not (expires := text.extr(query, "expires=", "&")):
             return ()
         file_id = base.rpartition("/")[2]
-        sha_postfix = "5nFp9kmbNnHdAFhaqMvt"
+        sha_postfix = "mSvL05GfEmeEmsEYfGCnVpEjYgTJraJN"
         sha_key = f"{file_id}_{expires}_{sha_postfix}"
         hash = hashlib.sha1(sha_key.encode()).hexdigest()
         headers = {"X-Version": hash, **self.headers}
         return self.extractor.request_json(file_url, headers=headers)
 
     def authenticate(self):
-        self.headers["Authorization"] = self._authenticate_impl(self.username)
+        self.headers["Authorization"] = self.extractor.cache(
+            self._authenticate_impl, self.username, _exp=3600, _mem=False)
 
-    @cache(maxage=3600, keyarg=1)
     def _authenticate_impl(self, username):
-        refresh_token = _refresh_token_cache(username)
+        refresh_token = self.extractor.cache(
+            _refresh_token_cache, username, _exp=28*86400, _mem=False)
         if refresh_token is None:
             self.extractor.log.info("Logging in as %s", username)
 
@@ -398,8 +433,9 @@ class IwaraAPI():
 
             if not (refresh_token := data.get("token")):
                 self.extractor.log.debug(data)
-                raise exception.AuthenticationError(data.get("message"))
-            _refresh_token_cache.update(username, refresh_token)
+                raise self.exc.AuthenticationError(data.get("message"))
+            self.extractor.cache_update(
+                _refresh_token_cache, username, refresh_token, _exp=28*86400)
 
         self.extractor.log.info("Refreshing access token for %s", username)
 
@@ -410,7 +446,7 @@ class IwaraAPI():
 
         if not (access_token := data.get("accessToken")):
             self.extractor.log.debug(data)
-            raise exception.AuthenticationError(data.get("message"))
+            raise self.exc.AuthenticationError(data.get("message"))
         return "Bearer " + access_token
 
     def _call(self, endpoint, params=None, headers=None):
@@ -439,6 +475,5 @@ class IwaraAPI():
             params["page"] += 1
 
 
-@cache(maxage=28*86400, keyarg=0)
 def _refresh_token_cache(username):
     return None

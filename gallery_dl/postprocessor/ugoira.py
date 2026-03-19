@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2018-2025 Mike Fährmann
+# Copyright 2018-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -36,6 +36,10 @@ class UgoiraPP(PostProcessor):
         self.repeat = options.get("repeat-last-frame", True)
         self.metadata = options.get("metadata", True)
         self.mtime = options.get("mtime", True)
+        self.mkvm_args = options.get("mkvmerge-args") or ()
+        self.mkvm_output = options.get("mkvmerge-output", False)
+        self.mkvm_metadata = options.get("mkvmerge-metadata", True)
+        self.mkvm_mtime = options.get("mkvmerge-mtime", True)
         self.skip = options.get("skip", True)
         self.uniform = self._convert_zip = self._convert_files = False
 
@@ -352,14 +356,13 @@ class UgoiraPP(PostProcessor):
 
     def _process_mkvmerge(self, pathfmt, tempdir):
         self._realpath = pathfmt.realpath
-        pathfmt.realpath = tempdir + "/temp." + self.extension
+        pathfmt.realpath = f"{tempdir}/temp.{self.extension}"
 
         return [
             self.ffmpeg,
-            "-f", "image2",
-            "-pattern_type", "sequence",
-            "-i", (f"{tempdir.replace('%', '%%')}/%06d."
-                   f"{self._frames[0]['file'].rpartition('.')[2]}"),
+            "-r", "25",
+            "-f", "concat",
+            "-i", self._write_ffmpeg_concat(tempdir, False),
         ]
 
     def _finalize_mkvmerge(self, pathfmt, tempdir):
@@ -368,19 +371,32 @@ class UgoiraPP(PostProcessor):
             "-o", pathfmt.path,  # mkvmerge does not support "raw" paths
             "--timecodes", "0:" + self._write_mkvmerge_timecodes(tempdir),
         ]
+        if self.mkvm_mtime and (dt := pathfmt.kwdict.get("date_url") or
+                                pathfmt.kwdict.get("date")):
+            args += ("--date", str(dt))
+        if not self.mkvm_metadata:
+            args.append("--disable-track-statistics-tags")
+        if not self.mkvm_output:
+            args.append("--quiet")
         if self.extension == "webm":
             args.append("--webm")
+        if self.mkvm_args:
+            args += self.mkvm_args
         args += ("=", pathfmt.realpath)
 
         pathfmt.realpath = self._realpath
         self._exec(args)
 
-    def _write_ffmpeg_concat(self, tempdir):
+    def _write_ffmpeg_concat(self, tempdir, duration=True):
         content = ["ffconcat version 1.0"]
 
-        for frame in self._frames:
-            content.append(f"file '{frame['file']}'\n"
-                           f"duration {frame['delay'] / 1000}")
+        if duration:
+            for frame in self._frames:
+                content.append(f"file '{frame['file']}'\n"
+                               f"duration {frame['delay'] / 1000}")
+        else:
+            for frame in self._frames:
+                content.append(f"file '{frame['file']}'")
         if self.repeat:
             content.append(f"file '{frame['file']}'")
         content.append("")

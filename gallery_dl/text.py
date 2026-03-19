@@ -120,7 +120,7 @@ def nameext_from_url(url, data=None):
 
 
 def nameext_from_name(filename, data=None):
-    """Extract the last part of an URL and fill 'data' accordingly"""
+    """Extract the last part of a file name and fill 'data' accordingly"""
     if data is None:
         data = {}
 
@@ -232,6 +232,11 @@ def extract_from(txt, pos=None, default=""):
 
 
 extract_urls = re(r"https?://[^\s\"'<>\\]+").findall
+
+
+def parse_hex_escapes(txt):
+    """Convert hex escapes in 'txt' into actual characters"""
+    return re(r"\\x([0-9a-fA-F]{2})").sub(_hex_to_char, txt)
 
 
 def parse_unicode_escapes(txt):

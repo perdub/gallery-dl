@@ -7,7 +7,7 @@
 """Extractors for https://hotleak.vip/"""
 
 from .common import Extractor, Message
-from .. import text, exception
+from .. import text
 import binascii
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?hotleak\.vip"
@@ -116,7 +116,7 @@ class HotleakCreatorExtractor(HotleakExtractor):
             try:
                 response = self.request(
                     url, headers=headers, params=params, notfound=True)
-            except exception.HttpError as exc:
+            except self.exc.HttpError as exc:
                 if exc.response.status_code == 429:
                     self.wait(
                         until=exc.response.headers.get("X-RateLimit-Reset"))
@@ -160,9 +160,9 @@ class HotleakCategoryExtractor(HotleakExtractor):
     def items(self):
         url = f"{self.root}/{self._category}"
 
-        if self._category in ("hot", "creators"):
+        if self._category in {"hot", "creators"}:
             data = {"_extractor": HotleakCreatorExtractor}
-        elif self._category in ("videos", "photos"):
+        elif self._category in {"videos", "photos"}:
             data = {"_extractor": HotleakPostExtractor}
 
         for item in self._pagination(url, self.params):

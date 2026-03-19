@@ -14,6 +14,7 @@ import ssl
 import time
 import netrc
 import queue
+import pickle
 import random
 import getpass
 import logging
@@ -53,7 +54,8 @@ class Extractor():
     request_interval_min = 0.0
     request_interval_429 = 60.0
     request_timestamp = 0.0
-    finalize = skip = None
+    finalize = skip_files = skip_posts = skip_children = skip_date = None
+    exc = exception
 
     def __init__(self, match):
         self.log = logging.getLogger(self.category)
@@ -117,21 +119,6 @@ class Extractor():
             return value
         return self.config(key2, default)
 
-    def config_deprecated(self, key, deprecated, default=None,
-                          sentinel=util.SENTINEL, history=set()):
-        value = self.config(deprecated, sentinel)
-        if value is not sentinel:
-            if deprecated not in history:
-                history.add(deprecated)
-                self.log.warning("'%s' is deprecated. Use '%s' instead.",
-                                 deprecated, key)
-            default = value
-
-        value = self.config(key, sentinel)
-        if value is not sentinel:
-            return value
-        return default
-
     def config_accumulate(self, key):
         return config.accumulate(self._cfgpath, key)
 
@@ -184,8 +171,8 @@ class Extractor():
         response = challenge = None
         tries = 1
 
-        if self._interval and interval:
-            seconds = (self._interval() -
+        if self._interval_request is not None and interval:
+            seconds = (self._interval_request() -
                        (time.time() - Extractor.request_timestamp))
             if seconds > 0.0:
                 self.sleep(seconds, "request")
@@ -251,13 +238,13 @@ class Extractor():
             if tries > retries:
                 break
 
-            seconds = tries
-            if self._interval:
-                s = self._interval()
+            seconds = self._interval_retry(tries)
+            if self._interval_request is not None:
+                s = self._interval_request()
                 if seconds < s:
                     seconds = s
-            if code == 429 and self._interval_429:
-                s = self._interval_429()
+            if code == 429 and self._interval_429 is not None:
+                s = self._interval_429(tries)
                 if seconds < s:
                     seconds = s
                 self.wait(seconds=seconds, reason="429 Too Many Requests")
@@ -343,9 +330,16 @@ class Extractor():
             return
 
         if reason:
-            t = dt.datetime.fromtimestamp(until).time()
-            isotime = f"{t.hour:02}:{t.minute:02}:{t.second:02}"
-            self.log.info("Waiting until %s (%s)", isotime, reason)
+            if seconds >= 3600.0:
+                h, m = divmod(seconds, 3600.0)
+                dur = f"{int(h)}h {int(m/60.0)}min"
+            elif seconds >= 60.0:
+                dur = str(int(seconds/60.0)) + " minutes"
+            else:
+                dur = str(int(seconds)) + " seconds"
+            t = time.localtime(until)
+            iso = f"{t.tm_hour:02}:{t.tm_min:02}:{t.tm_sec:02}"
+            self.log.info("Waiting for %s until %s (%s)", dur, iso, reason)
         time.sleep(seconds)
 
     def sleep(self, seconds, reason):
@@ -363,6 +357,73 @@ class Extractor():
             res = CACHE_UTILS[module] = __import__(
                 "utils." + module, globals(), None, module, 1)
         return res if name is None else getattr(res, name, None)
+
+    def cache(self, func, *args, _key=0, _exp=0, _mem=True):
+        if _key is None:
+            key = f"{func.__module__}.{func.__name__}"
+        else:
+            key = f"{func.__module__}.{func.__name__}-{args[_key]}"
+
+        try:
+            value, expires = CACHE_MEMORY[key]
+        except KeyError:
+            expires = 1
+
+        if not expires or expires > (now := int(time.time())):
+            return value
+
+        if not _mem and (db := cache.database()):
+            with db:
+                cursor = db.cursor()
+                try:
+                    cursor.execute("BEGIN EXCLUSIVE")
+                except Exception:
+                    pass  # swallow exception when already in a transaction
+                cursor.execute(
+                    "SELECT value, expires FROM data WHERE key=? LIMIT 1",
+                    (key,))
+
+                if (result := cursor.fetchone()) and (
+                        not (expires := result[1]) or expires > now):
+                    value, expires = result
+                    value = pickle.loads(value)
+                else:
+                    value = func(*args)
+                    expires = _exp and _exp+now
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO data VALUES (?,?,?)",
+                        (key, pickle.dumps(value), expires))
+        else:
+            value = func(*args)
+            expires = _exp and _exp+now
+
+        CACHE_MEMORY[key] = value, expires
+        return value
+
+    def cache_update(self, func, key=None, value=None, _exp=0, _mem=False):
+        if key is None:
+            key = f"{func.__module__}.{func.__name__}"
+        else:
+            key = f"{func.__module__}.{func.__name__}-{key}"
+
+        if value is None:
+            # delete cached value
+            try:
+                del CACHE_MEMORY[key]
+            except KeyError:
+                pass
+            if not _mem and (db := cache.database()):
+                with db:
+                    db.execute("DELETE FROM data WHERE key=?", (key,))
+        else:
+            # replace cached value
+            expires = _exp and _exp+int(time.time())
+            CACHE_MEMORY[key] = value, expires
+            if not _mem and (db := cache.database()):
+                with db:
+                    db.execute(
+                        "INSERT OR REPLACE INTO data VALUES (?,?,?)",
+                        (key, pickle.dumps(value), expires))
 
     def input(self, prompt, echo=True):
         self._check_input_allowed(prompt)
@@ -414,18 +475,38 @@ class Extractor():
         self._timeout = self.config("timeout", 30)
         self._verify = self.config("verify", True)
         self._proxies = util.build_proxy_map(self.config("proxy"), self.log)
-        self._interval = util.build_duration_func(
-            self.config("sleep-request", self.request_interval),
-            self.request_interval_min,
-        )
-        self._interval_429 = util.build_duration_func(
-            self.config("sleep-429", self.request_interval_429),
-        )
 
         if self._retries < 0:
             self._retries = float("inf")
         if not self._retry_codes:
             self._retry_codes = ()
+
+        self._interval_request = util.build_duration_func(
+            self.config("sleep-request", self.request_interval),
+            self.request_interval_min)
+
+        _interval_retry = self.config("sleep-retries")
+        if _interval_retry is None:
+            self._interval_retry = util.identity
+        else:
+            try:
+                self._interval_retry = util.build_duration_func_ex(
+                    _interval_retry)
+            except Exception as exc:
+                self.log.error("Invalid 'sleep-retry' value '%s' (%s: %s)",
+                               _interval_retry, exc.__class__.__name__, exc)
+                self._interval_retry = util.identity
+
+        _interval_429 = self.config("sleep-429")
+        if _interval_429 is None:
+            _interval_429 = self.request_interval_429
+        try:
+            self._interval_429 = util.build_duration_func_ex(_interval_429)
+        except Exception as exc:
+            self.log.error("Invalid 'sleep-429' value '%s' (%s: %s)",
+                           _interval_429, exc.__class__.__name__, exc)
+            self._interval_429 = util.build_duration_func_ex(
+                self.request_interval_429)
 
     def _init_session(self):
         self.session = session = requests.Session()
@@ -493,9 +574,11 @@ class Extractor():
         if not custom_ua or custom_ua == "auto":
             pass
         elif custom_ua == "browser":
-            headers["User-Agent"] = _browser_useragent(None)
+            headers["User-Agent"] = self.cache(
+                _browser_useragent, None, _exp=86400, _mem=False)
         elif custom_ua[0] == "@":
-            headers["User-Agent"] = _browser_useragent(custom_ua[1:])
+            headers["User-Agent"] = self.cache(
+                _browser_useragent, custom_ua[1:], _exp=86400, _mem=False)
         elif custom_ua[0] == "+":
             custom_ua = custom_ua[1:].lower()
             if custom_ua in {"firefox", "ff"}:
@@ -727,33 +810,23 @@ class Extractor():
             text.extr(page, " id='__NEXT_DATA__' type='application/json'>",
                       "</script>"))
 
-    def _cache(self, func, maxage, keyarg=None):
-        #  return cache.DatabaseCacheDecorator(func, maxage, keyarg)
-        return cache.DatabaseCacheDecorator(func, keyarg, maxage)
-
-    def _cache_memory(self, func, maxage=None, keyarg=None):
-        return cache.Memcache()
-
     def _get_date_min_max(self, dmin=None, dmax=None):
         """Retrieve and parse 'date-min' and 'date-max' config values"""
         def get(key, default):
             ts = self.config(key, default)
             if isinstance(ts, str):
-                dt_obj = dt.parse_iso(ts) if fmt is None else dt.parse(ts, fmt)
+                dt_obj = dt.parse_iso(ts)
                 if dt_obj is dt.NONE:
-                    self.log.warning(
-                        "Unable to parse '%s': Invalid %s string '%s'",
-                        key, "isoformat" if fmt is None else "date", ts)
+                    self.log.warning("Unable to parse '%s': Invalid ISO 8601 "
+                                     "date/time value '%s'", key, ts)
                     ts = default
                 else:
                     ts = int(dt.to_ts(dt_obj))
             return ts
-        fmt = self.config("date-format")
+        if self.config("date-format"):
+            self.log.error("'date-format' is no longer supported. "
+                           "Use ISO 8601 date/time values instead.")
         return get("date-min", dmin), get("date-max", dmax)
-
-    @classmethod
-    def _dump(cls, obj):
-        util.dump_json(obj, ensure_ascii=False, indent=2)
 
     def _dump_response(self, response, history=True):
         """Write the response content to a .txt file in the current directory.
@@ -784,7 +857,7 @@ class Extractor():
             with open(path + ".txt", 'wb') as fp:
                 util.dump_response(
                     response, fp,
-                    headers=(self._write_pages in ("all", "ALL")),
+                    headers=(self._write_pages in {"all", "ALL"}),
                     hide_auth=(self._write_pages != "ALL")
                 )
             self.log.info("Writing '%s' response to '%s'",
@@ -937,7 +1010,7 @@ class Dispatch():
     subcategory = "user"
     cookies_domain = None
     finalize = Extractor.finalize
-    skip = Extractor.skip
+    skip_files = None
 
     def __iter__(self):
         return self.items()
@@ -951,18 +1024,16 @@ class Dispatch():
             for data in extractor_data
         }
 
-        if alt is not None:
-            for sub, sub_alt, url in alt:
-                if url is None:
-                    extractors[sub_alt] = extractors[sub]
-                else:
-                    extractors[sub_alt] = (extractors[sub][0], url)
-
         include = self.config("include", default) or ()
         if include == "all":
             include = extractors
-        elif isinstance(include, str):
-            include = include.replace(" ", "").split(",")
+        else:
+            if isinstance(include, str):
+                include = include.replace(" ", "").split(",")
+            if alt is not None:
+                for sub, sub_alt, url in alt:
+                    extractors[sub_alt] = (extractors[sub] if url is None else
+                                           (extractors[sub][0], url))
 
         results = []
         for category in include:
@@ -1104,7 +1175,6 @@ def _build_requests_adapter(
     return adapter
 
 
-@cache.cache(maxage=86400, keyarg=0)
 def _browser_useragent(browser):
     """Get User-Agent header from default browser"""
     import webbrowser
@@ -1149,6 +1219,7 @@ def _browser_useragent(browser):
 
 CACHE_ADAPTERS = {}
 CACHE_COOKIES = {}
+CACHE_MEMORY = {}
 CACHE_UTILS = {}
 CATEGORY_MAP = ()
 

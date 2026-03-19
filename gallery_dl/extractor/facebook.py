@@ -7,8 +7,7 @@
 """Extractors for https://www.facebook.com/"""
 
 from .common import Extractor, Message, Dispatch
-from .. import text, util, exception
-from ..cache import memcache
+from .. import text, util
 
 BASE_PATTERN = r"(?:https?://)?(?:[\w-]+\.)?facebook\.com"
 USER_PATTERN = (BASE_PATTERN +
@@ -236,12 +235,12 @@ class FacebookExtractor(Extractor):
         res = self.request(url, **kwargs)
 
         if res.url.startswith(self.root + "/login"):
-            raise exception.AuthRequired(
+            raise self.exc.AuthRequired(
                 message=("You must be logged in to continue viewing images." +
                          LEFT_OFF_TXT))
 
         if b'{"__dr":"CometErrorRoot.react"}' in res.content:
-            raise exception.AbortExtraction(
+            raise self.exc.AbortExtraction(
                 "You've been temporarily blocked from viewing images.\n"
                 "Please try using a different account, "
                 "using a VPN or waiting before you retry." + LEFT_OFF_TXT)
@@ -315,7 +314,6 @@ class FacebookExtractor(Extractor):
 
             i += 1
 
-    @memcache(keyarg=1)
     def _extract_profile(self, profile, set_id=False):
         if set_id:
             url = f"{self.root}/{profile}/photos_by"
@@ -331,7 +329,7 @@ class FacebookExtractor(Extractor):
                 break
             if ('"props":{"title":"This content isn\'t available right now"' in
                     page):
-                raise exception.AuthRequired(
+                raise self.exc.AuthRequired(
                     "authenticated cookies", "profile",
                     "This content isn't available right now")
 
@@ -412,6 +410,12 @@ class FacebookPhotoExtractor(FacebookExtractor):
 
         directory = self.parse_set_page(set_page)
 
+        for key in ("set_id", "title", "user_id", "user_pfbid", "username"):
+            if not directory.get(key):
+                directory[key] = photo.get(key)
+            elif not photo.get(key):
+                photo[key] = directory.get(key)
+
         yield Message.Directory, "", directory
         yield Message.Url, photo["url"], photo
 
@@ -490,7 +494,7 @@ class FacebookInfoExtractor(FacebookExtractor):
     example = "https://www.facebook.com/USERNAME/info"
 
     def items(self):
-        user = self._extract_profile(self.groups[0])
+        user = self.cache(self._extract_profile, self.groups[0])
         return iter(((Message.Directory, "", user),))
 
 
@@ -534,7 +538,8 @@ class FacebookPhotosExtractor(FacebookExtractor):
     example = "https://www.facebook.com/USERNAME/photos"
 
     def items(self):
-        set_id = self._extract_profile(self.groups[0], True)["set_id"]
+        set_id = self.cache(
+            self._extract_profile, self.groups[0], True)["set_id"]
         if not set_id:
             return iter(())
 
@@ -551,7 +556,7 @@ class FacebookAvatarExtractor(FacebookExtractor):
     example = "https://www.facebook.com/USERNAME/avatar"
 
     def items(self):
-        user = self._extract_profile(self.groups[0])
+        user = self.cache(self._extract_profile, self.groups[0])
         avatar_page_url = user["profilePhoto"]["url"]
         avatar_page = self.photo_page_request_wrapper(avatar_page_url).text
 

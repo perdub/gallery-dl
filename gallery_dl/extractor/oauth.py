@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2017-2025 Mike Fährmann
+# Copyright 2017-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,9 +9,8 @@
 """Utility classes to setup OAuth and link accounts to gallery-dl"""
 
 from .common import Extractor
-from .. import text, oauth, util, config, exception
+from .. import text, oauth, util, config
 from ..output import stdout_write
-from ..cache import cache, memcache
 
 REDIRECT_URI_LOCALHOST = "http://localhost:6414/"
 REDIRECT_URI_HTTPS = "https://mikf.github.io/gallery-dl/oauth-redirect.html"
@@ -28,10 +27,11 @@ class OAuthBase(Extractor):
         self.client = None
 
     def _init(self):
-        self.cache = config.get(("extractor", self.category), "cache", True)
-        if self.cache and cache is memcache:
+        from .. import cache
+        self._cache = config.get(("extractor", self.category), "cache", True)
+        if self._cache and cache.database() is None:
             self.log.warning("cache file is not writeable")
-            self.cache = False
+            self._cache = False
 
     def oauth_config(self, key, default=None):
         value = config.interpolate(("extractor", self.subcategory), key)
@@ -74,7 +74,7 @@ class OAuthBase(Extractor):
                 msg = "Received invalid"
             if exc:
                 exc = f" ({exc.__class__.__name__}: {exc})"
-            raise exception.AbortExtraction(f"{msg} OAuth response{exc}")
+            raise self.exc.AbortExtraction(f"{msg} OAuth response{exc}")
 
     def send(self, msg):
         """Send 'msg' to the socket opened in 'recv()'"""
@@ -137,9 +137,9 @@ class OAuthBase(Extractor):
         token_secret = data["oauth_token_secret"]
 
         # write to cache
-        if self.cache:
+        if self._cache:
             key = (self.subcategory, self.session.auth.consumer_key)
-            oauth._token_cache.update(key, (token, token_secret))
+            self.cache_update(oauth._token_cache, key, (token, token_secret))
             self.log.info("Writing tokens to cache")
 
         # display tokens
@@ -208,8 +208,8 @@ class OAuthBase(Extractor):
         token_name = key.replace("_", "-")
 
         # write to cache
-        if self.cache and cache:
-            cache.update(instance or ("#" + str(client_id)), token)
+        if self._cache and cache:
+            self.cache_update(cache, instance or ("#" + str(client_id)), token)
             self.log.info("Writing '%s' to cache", token_name)
 
         # display token
@@ -229,7 +229,7 @@ class OAuthBase(Extractor):
         msg = f"\nYour {key} {_is}\n\n{val}\n\n"
 
         opt = self.oauth_config(names[0])
-        if self.cache and (opt is None or opt == "cache"):
+        if self._cache and (opt is None or opt == "cache"):
             msg += _vh + " been cached and will automatically be used.\n"
         else:
             msg += f"Put {_va} into your configuration file as \n"
@@ -237,7 +237,7 @@ class OAuthBase(Extractor):
                 f"'extractor.{self.subcategory}.{n}'"
                 for n in names
             )
-            if self.cache:
+            if self._cache:
                 msg = (f"{msg}\nor set\n'extractor."
                        f"{self.subcategory}.{names[0]}' to \"cache\"")
             msg = f"{msg}\nto use {_it}.\n"
@@ -368,7 +368,7 @@ class OAuthMastodon(OAuthBase):
             if self.instance == root.partition("://")[2]:
                 break
         else:
-            application = self._register(self.instance)
+            application = self.cache(self._register, self.instance, _mem=False)
 
         self._oauth2_authorization_code_grant(
             application["client-id"],
@@ -383,7 +383,6 @@ class OAuthMastodon(OAuthBase):
         )
         return iter(NOOP)
 
-    @cache(maxage=36500*86400, keyarg=1)
     def _register(self, instance):
         self.log.info("Registering application for '%s'", instance)
 
@@ -396,7 +395,7 @@ class OAuthMastodon(OAuthBase):
         data = self.request_json(url, method="POST", data=data)
 
         if "client_id" not in data or "client_secret" not in data:
-            raise exception.AbortExtraction(
+            raise self.exc.AbortExtraction(
                 f"Failed to register new application: '{data}'")
 
         data["client-id"] = data.pop("client_id")
@@ -454,14 +453,14 @@ class OAuthPixiv(OAuthBase):
 
         if "error" in data:
             stdout_write(f"\n{data}\n")
-            if data["error"] in ("invalid_request", "invalid_grant"):
+            if data["error"] in {"invalid_request", "invalid_grant"}:
                 stdout_write("'code' expired, try again\n\n")
             return
 
         token = data["refresh_token"]
-        if self.cache:
+        if self._cache:
             username = self.oauth_config("username")
-            pixiv._refresh_token_cache.update(username, token)
+            self.cache_update(pixiv._refresh_token_cache, username, token)
             self.log.info("Writing 'refresh-token' to cache")
 
         stdout_write(self._generate_message(("refresh-token",), (token,)))

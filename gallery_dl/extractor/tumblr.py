@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2016-2025 Mike Fährmann
+# Copyright 2016-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,7 +9,7 @@
 """Extractors for https://www.tumblr.com/"""
 
 from .common import Extractor, Message
-from .. import text, util, dt, oauth, exception
+from .. import text, util, dt, oauth
 
 
 BASE_PATTERN = (
@@ -55,6 +55,10 @@ class TumblrExtractor(Extractor):
             self._skip_reblog = self._skip_reblog_same_blog
 
         self.date_min, self.api.before = self._get_date_min_max(0, None)
+
+    def skip_date(self, date):
+        self.api.before = int(dt.to_ts(date))
+        return True
 
     def items(self):
         blog = None
@@ -142,6 +146,9 @@ class TumblrExtractor(Extractor):
                 # only "chat" posts are missing a "reblog" key in their
                 # API response, but they can't contain images/videos anyway
                 body = post["reblog"]["comment"] + post["reblog"]["tree_html"]
+                if "question" in post:
+                    body = (f"{body} {post['question']} "
+                            f"{post.get('answer') or ''}")
                 for url in _findall_image(body):
                     url, fb = self._original_inline_image(url)
                     if fb:
@@ -473,7 +480,16 @@ class TumblrAPI(oauth.OAuth1API):
             self.log.debug(data)
 
             if status == 403:
-                raise exception.AuthorizationError()
+                msg = data.get("response")
+                if msg == "You do not have permission to view this blog" and \
+                        self.api_key is None:
+                    self.log.debug("Retrying with 'api_key' authentication")
+                    self.api_key = params["api_key"] = \
+                        self.session.auth.consumer_key
+                    self.session = self.extractor.session
+                    continue
+                msg = f"'{msg}'" if isinstance(msg, str) else None
+                raise self.exc.AuthorizationError(msg)
 
             elif status == 404:
                 try:
@@ -492,8 +508,8 @@ class TumblrAPI(oauth.OAuth1API):
                     else:
                         self.log.info("Run 'gallery-dl oauth:tumblr' "
                                       "to access dashboard-only blogs")
-                    raise exception.AuthorizationError(error)
-                raise exception.NotFoundError("user or post")
+                    raise self.exc.AuthorizationError(error)
+                raise self.exc.NotFoundError("user or post")
 
             elif status == 429:
                 # daily rate limit
@@ -514,7 +530,7 @@ class TumblrAPI(oauth.OAuth1API):
                         continue
 
                     t = (dt.now() + dt.timedelta(0, float(reset))).time()
-                    raise exception.AbortExtraction(
+                    raise self.exc.AbortExtraction(
                         f"Aborting - Rate limit will reset at "
                         f"{t.hour:02}:{t.minute:02}:{t.second:02}")
 
@@ -524,7 +540,7 @@ class TumblrAPI(oauth.OAuth1API):
                     self.extractor.wait(seconds=reset)
                     continue
 
-            raise exception.AbortExtraction(data)
+            raise self.exc.AbortExtraction(data)
 
     def _pagination(self, endpoint, params,
                     blog=None, key="posts", cache=False):

@@ -24,6 +24,7 @@ from . import (
     path,
     text,
     util,
+    dt,
     version,
 )
 from .extractor.message import Message
@@ -316,11 +317,11 @@ class Job():
 
         extr.initialize()
         self.pred_url = self._prepare_predicates(
-            "file", "image", extr.skip)
+            "file", "image", extr.skip_files)
         self.pred_post = self._prepare_predicates(
-            "post", None, None)
+            "post", None, extr.skip_posts)
         self.pred_queue = self._prepare_predicates(
-            "child", "chapter", None)
+            "child", "chapter", extr.skip_children)
 
         init = extr.config("init", False)
         if init and init != "lazy":
@@ -342,6 +343,20 @@ class Job():
         if extr.config(target + "-unique") or \
                 alt is not None and extr.config(alt + "-unique"):
             predicates.append(util.predicate_unique())
+
+        if target == "post":
+            if dta := extr.config("date-after"):
+                dta = dt.convert(dta)
+            if dtb := extr.config("date-before"):
+                dtb = dt.convert(dtb)
+            if dta or dtb:
+                predicates.append(util.predicate_date(
+                    dtb or None, dta or None, extr.skip_date))
+
+            if tl := extr.config2("whitelist-tags", "tags-whitelist"):
+                predicates.append(util.predicate_tags(tl, True))
+            elif tl := extr.config2("blacklist-tags", "tags-blacklist"):
+                predicates.append(util.predicate_tags(tl, False))
 
         if (pfilter := extr.config(target + "-filter")) or \
                 alt is not None and (pfilter := extr.config(alt + "-filter")):
@@ -430,24 +445,28 @@ class DownloadJob(Job):
             self.extractor.sleep(self.sleep(), "download")
 
         # download from URL
-        if not self.download(url):
+        failed = False
+        try:
+            if not self.download(url):
+                # use fallback URLs if available/enabled
+                fallback = kwdict.get("_fallback", ()) if self.fallback else ()
+                for num, url in enumerate(fallback, 1):
+                    util.remove_file(pathfmt.temppath)
+                    self.log.info("Trying fallback URL #%d", num)
+                    if self.download(url):
+                        break
+                else:
+                    failed = True
+        except exception.StopDownload:
+            failed = True
 
-            # use fallback URLs if available/enabled
-            fallback = kwdict.get("_fallback", ()) if self.fallback else ()
-            for num, url in enumerate(fallback, 1):
-                util.remove_file(pathfmt.temppath)
-                self.log.info("Trying fallback URL #%d", num)
-                if self.download(url):
-                    break
-            else:
-                # download failed
-                self.status |= 4
-                self.log.error("Failed to download %s",
-                               pathfmt.filename or url)
-                if "error" in hooks:
-                    for callback in hooks["error"]:
-                        callback(pathfmt)
-                return
+        if failed:
+            self.status |= 4
+            self.log.error("Failed to download %s", pathfmt.filename or url)
+            if "error" in hooks:
+                for callback in hooks["error"]:
+                    callback(pathfmt)
+            return
 
         if not pathfmt.temppath:
             if archive is not None and self._archive_write_skip:
@@ -455,10 +474,20 @@ class DownloadJob(Job):
             self.handle_skip()
             return
 
-        # run post processors
+        # run postprocessors
         if "file" in hooks:
             for callback in hooks["file"]:
                 callback(pathfmt)
+
+        # process download flag
+        if FLAGS.DOWNLOAD is not None:
+            FLAGS.DOWNLOAD = None
+            self.status |= 4
+            self.log.error("Failed to download %s", pathfmt.filename or url)
+            if "error" in hooks:
+                for callback in hooks["error"]:
+                    callback(pathfmt)
+            return
 
         # download succeeded
         pathfmt.finalize()
@@ -578,7 +607,7 @@ class DownloadJob(Job):
                 callback(pathfmt)
 
     def handle_finalize(self):
-        if self.archive:
+        if self.archive is not None:
             if not self.status:
                 self.archive.finalize()
             self.archive.close()
@@ -686,7 +715,7 @@ class DownloadJob(Job):
                     archive_table,
                     cfg("archive-mode"),
                     cfg("archive-pragma"),
-                    kwdict,
+                    pathfmt,
                 )
             except Exception as exc:
                 extr.log.warning(
@@ -897,8 +926,8 @@ class KeywordJob(Job):
                 self.extractor.log.info(
                     "Try 'gallery-dl -K \"%s\"' instead.", url)
         else:
-            stdout_write("Keywords for --chapter-filter:\n"
-                         "------------------------------\n")
+            stdout_write("Keywords for --child-filter:\n"
+                         "----------------------------\n")
             self.print_kwdict(kwdict)
             if extr or self.extractor.categorytransfer:
                 stdout_write("\n")

@@ -9,8 +9,7 @@
 """Extractors for https://www.weibo.com/"""
 
 from .common import Extractor, Message, Dispatch
-from .. import text, util, exception
-from ..cache import cache
+from .. import text, util
 import random
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.|m\.)?weibo\.c(?:om|n)"
@@ -41,7 +40,8 @@ class WeiboExtractor(Extractor):
         self.gifs = self.config("gifs", True)
         self.gifs_video = (self.gifs == "video")
 
-        cookies = _cookie_cache()
+        cookies = self.cache(
+            _cookie_cache, _key=None, _exp=365*86400, _mem=False)
         if cookies is None:
             self.logged_in = self.cookies_check(
                 self.cookies_names, self.cookies_domain)
@@ -65,7 +65,7 @@ class WeiboExtractor(Extractor):
 
         if response.history:
             if "login.sina.com" in response.url:
-                raise exception.AbortExtraction(
+                raise self.exc.AbortExtraction(
                     f"HTTP redirect to login page "
                     f"({response.url.partition('?')[0]})")
             if "passport.weibo.com" in response.url:
@@ -189,7 +189,7 @@ class WeiboExtractor(Extractor):
                 not text.ext_from_url(video["url"]):
             try:
                 video["url"] = self.request_location(video["url"])
-            except exception.HttpError as exc:
+            except self.exc.HttpError as exc:
                 self.log.warning("%s: %s", exc.__class__.__name__, exc)
                 video["url"] = ""
 
@@ -230,7 +230,7 @@ class WeiboExtractor(Extractor):
             if not data.get("ok"):
                 self.log.debug(response.content)
                 if "since_id" not in params:  # first iteration
-                    raise exception.AbortExtraction(
+                    raise self.exc.AbortExtraction(
                         f'"{data.get("msg") or "unknown error"}"')
 
             try:
@@ -301,7 +301,8 @@ class WeiboExtractor(Extractor):
             "_rand": random.random(),
         }
         response = Extractor.request(self, passport_url, params=params)
-        _cookie_cache.update("", response.cookies)
+        self.cache_update(
+            _cookie_cache, None, response.cookies, _exp=365*86400)
 
 
 class WeiboUserExtractor(WeiboExtractor):
@@ -479,14 +480,14 @@ class WeiboAlbumExtractor(WeiboExtractor):
             try:
                 sub = subalbums[int(subalbum)-1]
             except Exception:
-                raise exception.NotFoundError("subalbum")
+                raise self.exc.NotFoundError("subalbum")
         else:
             subalbum = text.unquote(subalbum)
             for sub in subalbums:
                 if sub["pic_title"] == subalbum:
                     break
             else:
-                raise exception.NotFoundError("subalbum")
+                raise self.exc.NotFoundError("subalbum")
         return ((sub, self._pagination_subalbum(uid, sub)),)
 
     def _pagination_subalbum(self, uid, sub):
@@ -504,10 +505,9 @@ class WeiboStatusExtractor(WeiboExtractor):
         status = self._status_by_id(self.user)
         if status.get("ok") != 1:
             self.log.debug(status)
-            raise exception.NotFoundError("status")
+            raise self.exc.NotFoundError("status")
         return (status,)
 
 
-@cache(maxage=365*86400)
 def _cookie_cache():
     return None

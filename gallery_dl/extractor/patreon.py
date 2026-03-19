@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2019-2025 Mike Fährmann
+# Copyright 2019-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://www.patreon.com/"""
 
 from .common import Extractor, Message
-from .. import text, util, dt, exception
-from ..cache import memcache
+from .. import text, util, dt
 import collections
 import itertools
 
@@ -23,17 +22,17 @@ class PatreonExtractor(Extractor):
     directory_fmt = ("{category}", "{creator[full_name]}")
     filename_fmt = "{id}_{title}_{num:>02}.{extension}"
     archive_fmt = "{id}_{num}"
-    useragent = "Patreon/72.2.28 (Android; Android 14; Scale/2.10)"
+    useragent = "Patreon/126.9.0.15 (Android; Android 14; Scale/2.10)"
     _warning = True
 
     def _init(self):
-        if not self.cookies_check(("session_id",), subdomains=True):
+        if self.cookies_check(("session_id",), subdomains=True):
+            self._logged_in = True
+        else:
+            self._logged_in = False
             if self._warning:
                 PatreonExtractor._warning = False
                 self.log.warning("no 'session_id' cookie set")
-            if self.session.headers["User-Agent"] is self.useragent:
-                self.session.headers["User-Agent"] = \
-                    "Patreon/7.6.28 (Android; Android 11; Scale/2.10)"
 
         if format_images := self.config("format-images"):
             self._images_fmt = format_images
@@ -195,8 +194,18 @@ class PatreonExtractor(Extractor):
 
         user = relationships["user"]
         attr["creator"] = (
-            self._user(user["links"]["related"]) or
+            self.cache(self._user, user["links"]["related"]) or
             included["user"][user["data"]["id"]])
+
+        if not attr.get("content") and (
+                cjs := attr.pop("content_json_string", None)):
+            try:
+                attr["content"] = self.utils("tiptap").to_html(cjs)
+            except Exception as exc:
+                self.log.traceback(exc)
+                self.log.warning(
+                    "%s: Failed to parse content_json_string (%s: %s)",
+                    attr["id"], exc.__class__.__name__, exc)
 
         return attr
 
@@ -217,7 +226,6 @@ class PatreonExtractor(Extractor):
             ]
         return []
 
-    @memcache(keyarg=1)
     def _user(self, url):
         """Fetch user information"""
         response = self.request(url, fatal=False)
@@ -270,13 +278,14 @@ class PatreonExtractor(Extractor):
             "is_nsfw,is_monthly,name,url"
 
             "&fields[post]=change_visibility_at,comment_count,commenter_count,"
-            "content,current_user_can_comment,current_user_can_delete,"
-            "current_user_can_view,current_user_has_liked,embed,image,"
-            "insights_last_updated_at,is_paid,like_count,meta_image_url,"
-            "min_cents_pledged_to_view,post_file,post_metadata,published_at,"
-            "patreon_url,post_type,pledge_url,preview_asset_type,thumbnail,"
-            "thumbnail_url,teaser_text,title,upgrade_url,url,"
-            "was_posted_by_campaign_owner,has_ti_violation,moderation_status,"
+            "content,content_json_string,current_user_can_comment,"
+            "current_user_can_delete,current_user_can_view,"
+            "current_user_has_liked,embed,image,insights_last_updated_at,"
+            "is_paid,like_count,meta_image_url,min_cents_pledged_to_view,"
+            "post_file,post_metadata,published_at,patreon_url,post_type,"
+            "pledge_url,preview_asset_type,thumbnail,thumbnail_url,"
+            "teaser_text,title,upgrade_url,url,was_posted_by_campaign_owner,"
+            "has_ti_violation,moderation_status,"
             "post_level_suspension_removal_date,pls_one_liners_by_category,"
             "video_preview,view_count"
 
@@ -347,7 +356,7 @@ class PatreonExtractor(Extractor):
             except Exception:
                 pass
 
-        raise exception.AbortExtraction("Unable to extract bootstrap data")
+        raise self.exc.AbortExtraction("Unable to extract bootstrap data")
 
 
 class PatreonCollectionExtractor(PatreonExtractor):
@@ -428,12 +437,12 @@ class PatreonCreatorExtractor(PatreonExtractor):
             data = None
             data = self._extract_bootstrap(page)
             return data["campaign"]["data"]["id"]
-        except exception.ControlException:
+        except self.exc.ControlException:
             pass
         except Exception as exc:
             if data:
                 self.log.debug(data)
-            raise exception.AbortExtraction(
+            raise self.exc.AbortExtraction(
                 f"Unable to extract campaign ID "
                 f"({exc.__class__.__name__}: {exc})")
 
@@ -442,7 +451,7 @@ class PatreonCreatorExtractor(PatreonExtractor):
                 page, r'{\"value\":{\"campaign\":{\"data\":{\"id\":\"', '\\"'):
             return cid
 
-        raise exception.AbortExtraction("Failed to extract campaign ID")
+        raise self.exc.AbortExtraction("Failed to extract campaign ID")
 
     def _get_filters(self, params):
         return "".join(
@@ -457,6 +466,11 @@ class PatreonUserExtractor(PatreonExtractor):
     subcategory = "user"
     pattern = r"(?:https?://)?(?:www\.)?patreon\.com/home$"
     example = "https://www.patreon.com/home"
+
+    def skip_date(self, date):
+        self._cursor = cursor = dt.from_ts(date).isoformat()
+        self._init_cursor = lambda: cursor
+        return True
 
     def posts(self):
         if date_max := self._get_date_min_max(None, None)[1]:
@@ -477,8 +491,16 @@ class PatreonPostExtractor(PatreonExtractor):
     example = "https://www.patreon.com/posts/TITLE-12345"
 
     def posts(self):
+        if not self._logged_in and \
+                self.session.headers["User-Agent"] is self.useragent:
+            # enable `.m3u8` manifest downloads
+            headers = {"User-Agent":
+                       "Patreon/14.2.1 (Android; Android 11; Scale/2.10)"}
+        else:
+            headers = None
+
         url = f"{self.root}/posts/{self.groups[0]}"
-        page = self.request(url, notfound=True).text
+        page = self.request(url, headers=headers, notfound=True).text
         bootstrap = self._extract_bootstrap(page)
 
         try:

@@ -309,6 +309,93 @@ __tests__ = (
 },
 
 {
+    "#url"     : "https://www.bellazon.com/main/topic/72551-ren%C3%A9e-murden/page/45/#findComment-5468001",
+    "#comment" : "quote / missing parts of 'content' (#9140)",
+    "#class"   : bellazon.BellazonPostExtractor,
+    "#results" : (
+        "https://www.bellazon.com/main/uploads/monthly_2022_05/QT_hotels.jpg.280653cd3cdf649a55eb5be700b4206d.jpg",
+        "https://www.bellazon.com/main/uploads/monthly_2022_05/Renee_Test.jpg.410ac3d96ec14f535e7935a488f1abb0.jpg",
+        "https://www.bellazon.com/main/uploads/monthly_2022_05/Renee.jpg.5f84145f3b0bb98a4a0e48198354ccb5.jpg",
+        "http://depositfiles.com/files/2rmz400vm",
+        "https://k2s.cc/file/87f706e69800a/RM_DanielShortt.7z",
+    ),
+
+    "post"        : {
+        "author_id"  : "194076",
+        "author_slug": "zorzabosti",
+        "author_url" : "https://www.bellazon.com/main/profile/194076-zorzabosti/",
+        "date"       : "dt:2022-05-08 17:06:36",
+        "id"         : "5468001",
+        "content"    : str,
+    },
+    "thread"      : {
+        "date": "dt:2019-04-15 17:00:08",
+        "id"  : "72551",
+    },
+},
+
+{
+    "#url"     : "https://www.bellazon.com/main/topic/46019-alexis-ren/page/19/#findComment-3649926",
+    "#comment" : "ignore forum signature (#9140)",
+    "#class"   : bellazon.BellazonPostExtractor,
+    "#auth"    : True,
+    "#count"   : 0,
+    "#metadata": "post",
+
+    "post": {
+        "author_id"  : "18831",
+        "author_slug": "clauds",
+        "author_url" : "https://www.bellazon.com/main/profile/18831-clauds/",
+        "content"    : "<p><span style=\"font-family:tahoma, geneva, sans-serif;\">I don't know for VS Pink tbh, I think she's better fitted for SI tbh</span></p>",
+        "count"      : 0,
+        "date"       : "dt:2015-03-20 23:50:18",
+        "id"         : "3649926",
+    },
+},
+
+{
+    "#url"     : "https://www.bellazon.com/main/topic/46019-alexis-ren/page/8/#findComment-3383650",
+    "#comment" : "quote in quote (#9140)",
+    "#class"   : bellazon.BellazonPostExtractor,
+    "#results" : "https://www.bellazon.com/main/uploads/monthly_03_2014/post-57667-0-98883500-1395169341.jpg",
+},
+
+{
+    "#url"     : "https://www.bellazon.com/main/topic/46019-alexis-ren/page/8/#findComment-3383650",
+    "#comment" : "quote in quote (#9140)",
+    "#class"   : bellazon.BellazonPostExtractor,
+    "#options" : {"quoted": True},
+    "#archive" : False,
+    "#pattern" : r"^https?://(imgbox.com|bryant.photography|www.bellazon.com/main/(uploads|index.php\?app=core&module=attach))",
+    "#count"   : 20,
+},
+
+{
+    "#url"     : "https://www.bellazon.com/main/topic/41694-taylor-hill/page/59/#findComment-3481833",
+    "#comment" : "'/public/style_emoticons/' emoticon",
+    "#class"   : bellazon.BellazonPostExtractor,
+    "#count"   : 0,
+},
+
+{
+    "#url"     : "https://www.bellazon.com/main/topic/7459-candice-swanepoel/page/1122/#findComment-3442969",
+    "#comment" : "'/main/index.php' attachment (#9140)",
+    "#class"   : bellazon.BellazonPostExtractor,
+    "#results" : "https://www.bellazon.com/main/index.php?app=core&module=attach&section=attach&attach_rel_module=post&attach_id=2021999",
+
+    "extension"   : "jpg",
+    "filename"    : "image",
+    "id"          : "2021999",
+    "name"        : "image.jpg",
+    "post"        : {
+        "author_id"  : "51006",
+        "author_slug": "badboy_207",
+        "date"       : "dt:2014-06-27 21:23:51",
+        "id"         : "3442969",
+    },
+},
+
+{
     "#url"     : "https://www.bellazon.com/main/topic/57872-millie-brady/",
     "#class"   : bellazon.BellazonThreadExtractor,
     "#pattern" : r"https://www\.bellazon\.com/main/uploads/monthly_\d+_\d+/.+\.jpg",

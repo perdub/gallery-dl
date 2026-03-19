@@ -10,7 +10,6 @@
 
 from .common import ChapterExtractor, MangaExtractor
 from .. import text
-from ..cache import memcache
 
 BASE_PATTERN = r"(?:https?://)?weebdex\.org"
 
@@ -31,6 +30,26 @@ class WeebdexBase():
             "Sec-Fetch-Site": "same-site",
         }
 
+    def _manga_info(self, mid):
+        url = f"{self.root_api}/manga/{mid}"
+        manga = self.request_json(url, headers=self.headers_api)
+        rel = manga["relationships"]
+
+        return {
+            "manga"   : manga.get("title"),
+            "manga_id": manga.get("id"),
+            "manga_date": self.parse_datetime_iso(manga.get("created_at")),
+            "year"    : manga.get("year"),
+            "status"  : manga.get("status"),
+            "origin"  : manga.get("language"),
+            "description": manga.get("description"),
+            "demographic": manga.get("demographic"),
+            "tags"    : [f"{t['group']}:{t['name']}"
+                         for t in rel.get("tags") or ()],
+            "author"  : [a["name"] for a in rel.get("authors") or ()],
+            "artist"  : [a["name"] for a in rel.get("artists") or ()],
+        }
+
 
 class WeebdexChapterExtractor(WeebdexBase, ChapterExtractor):
     """Extractor for weebdex manga chapters"""
@@ -44,10 +63,14 @@ class WeebdexChapterExtractor(WeebdexBase, ChapterExtractor):
         self.data = data = self.request_json(url, headers=self.headers_api)
 
         rel = data.pop("relationships")
-        chapter, sep, minor = data["chapter"].partition(".")
+        try:
+            chapter, sep, minor = data["chapter"].partition(".")
+        except Exception:
+            chapter = 0
+            sep = minor = ""
 
         return {
-            **_manga_info(self, rel["manga"]["id"]),
+            **self.cache(self._manga_info, rel["manga"]["id"]),
             "title"   : data.get("title", ""),
             "version" : data.get("version", 0),
             "volume"  : text.parse_int(data.get("volume")),
@@ -94,14 +117,13 @@ class WeebdexMangaExtractor(WeebdexBase, MangaExtractor):
 
         params = text.parse_query(qs)
         params.setdefault("limit", 100)
+        params.setdefault("order", "asc")
         if "tlang" not in params:
             params["tlang"] = self.config("lang", "en")
-        if "order" not in params:
-            params["order"] = ("desc" if self.config("chapter-reverse") else
-                               "asc")
+
         url = f"{self.root_api}/manga/{mid}/chapters"
         base = self.root + "/chapter/"
-        manga = _manga_info(self, mid)
+        manga = self.cache(self._manga_info, mid)
         results = []
 
         while True:
@@ -109,7 +131,11 @@ class WeebdexMangaExtractor(WeebdexBase, MangaExtractor):
                 url, params=params, headers=self.headers_api)
 
             for ch in data["data"]:
-                chapter, sep, minor = ch["chapter"].partition(".")
+                try:
+                    chapter, sep, minor = ch["chapter"].partition(".")
+                except Exception:
+                    chapter = 0
+                    sep = minor = ""
                 ch["volume"] = text.parse_int(ch.get("volume"))
                 ch["chapter"] = text.parse_int(chapter)
                 ch["chapter_minor"] = sep + minor
@@ -121,25 +147,3 @@ class WeebdexMangaExtractor(WeebdexBase, MangaExtractor):
             params["page"] = data["page"] + 1
 
         return results
-
-
-@memcache(keyarg=1)
-def _manga_info(self, mid):
-    url = f"{self.root_api}/manga/{mid}"
-    manga = self.request_json(url, headers=self.headers_api)
-    rel = manga["relationships"]
-
-    return {
-        "manga"   : manga.get("title"),
-        "manga_id": manga.get("id"),
-        "manga_date": self.parse_datetime_iso(manga.get("created_at")),
-        "year"    : manga.get("year"),
-        "status"  : manga.get("status"),
-        "origin"  : manga.get("language"),
-        "description": manga.get("description"),
-        "demographic": manga.get("demographic"),
-        "tags"    : [f"{t['group']}:{t['name']}"
-                     for t in rel.get("tags") or ()],
-        "author"  : [a["name"] for a in rel.get("authors") or ()],
-        "artist"  : [a["name"] for a in rel.get("artists") or ()],
-    }

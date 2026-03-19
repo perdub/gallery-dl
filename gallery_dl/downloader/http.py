@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2014-2025 Mike Fährmann
+# Copyright 2014-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -42,7 +42,9 @@ class HttpDownloader(DownloaderBase):
         self.rate = self.config("rate")
         interval_429 = self.config("sleep-429")
 
-        if not self.config("consume-content", False):
+        if self.config("consume-content", False):
+            self.release_conn = self._release_conn_impl
+        else:
             # this resets the underlying TCP connection, and therefore
             # if the program makes another request to the same domain,
             # a new connection (either TLS or plain TCP) must be made
@@ -87,7 +89,12 @@ class HttpDownloader(DownloaderBase):
         if interval_429 is None:
             self.interval_429 = extractor._interval_429
         else:
-            self.interval_429 = util.build_duration_func(interval_429)
+            try:
+                self.interval_429 = util.build_duration_func_ex(interval_429)
+            except Exception as exc:
+                self.log.error("Invalid 'sleep-429' value '%s' (%s: %s)",
+                               interval_429, exc.__class__.__name__, exc)
+                self.interval_429 = extractor._interval_429
 
     def download(self, url, pathfmt):
         try:
@@ -118,6 +125,9 @@ class HttpDownloader(DownloaderBase):
             pathfmt.part_enable(self.partdir)
 
         while True:
+            if FLAGS.DOWNLOAD is not None:
+                return FLAGS.process("DOWNLOAD")
+
             if tries:
                 if response:
                     self.release_conn(response)
@@ -128,7 +138,7 @@ class HttpDownloader(DownloaderBase):
                     return False
 
                 if code == 429 and self.interval_429:
-                    s = self.interval_429()
+                    s = self.interval_429(tries)
                     time.sleep(s if s > tries else tries)
                 else:
                     time.sleep(tries)
@@ -184,7 +194,8 @@ class HttpDownloader(DownloaderBase):
             elif code == 206:  # Partial Content
                 offset = file_size
                 size = response.headers["Content-Range"].rpartition("/")[2]
-            elif code == 416 and file_size:  # Requested Range Not Satisfiable
+            elif code == 416 and file_size:  # Range Not Satisfiable
+                self._release_conn_impl(response)
                 break
             else:
                 msg = f"'{code} {response.reason}' for '{url}'"
@@ -370,7 +381,7 @@ class HttpDownloader(DownloaderBase):
 
         return True
 
-    def release_conn(self, response):
+    def _release_conn_impl(self, response):
         """Release connection back to pool by consuming response body"""
         try:
             for _ in response.iter_content(self.chunk_size):

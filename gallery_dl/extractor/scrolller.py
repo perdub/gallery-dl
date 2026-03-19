@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2024-2025 Mike Fährmann
+# Copyright 2024-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://scrolller.com/"""
 
 from .common import Extractor, Message
-from .. import text, util, exception
-from ..cache import cache
+from .. import text, util
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?scrolller\.com"
 
@@ -69,9 +68,10 @@ class ScrolllerExtractor(Extractor):
     def login(self):
         username, password = self._get_auth_info()
         if username:
-            self.auth_token = self._login_impl(username, password)
+            self.auth_token = self.cache(
+                self._login_impl, username, password,
+                _exp=28*86400, _mem=False)
 
-    @cache(maxage=28*86400, keyarg=1)
     def _login_impl(self, username, password):
         self.log.info("Logging in as %s", username)
 
@@ -82,9 +82,9 @@ class ScrolllerExtractor(Extractor):
 
         try:
             data = self._request_graphql("LoginQuery", variables, False)
-        except exception.HttpError as exc:
+        except self.exc.HttpError as exc:
             if exc.status == 403:
-                raise exception.AuthenticationError()
+                raise self.exc.AuthenticationError()
             raise
 
         return data["login"]["token"]
@@ -206,7 +206,7 @@ class ScrolllerFollowingExtractor(ScrolllerExtractor):
         self.login()
 
         if not self.auth_token:
-            raise exception.AuthorizationError("Login required")
+            raise self.exc.AuthorizationError("Login required")
 
         variables = {
             "iterator": None,

@@ -52,6 +52,21 @@ __tests__ = (
 },
 
 {
+    "#url"     : "https://www.old.reddit.com/r/lavaporn/",
+    "#class"   : reddit.RedditSubredditExtractor,
+},
+
+{
+    "#url"     : "https://www.np.reddit.com/r/lavaporn/",
+    "#class"   : reddit.RedditSubredditExtractor,
+},
+
+{
+    "#url"     : "https://www.m.reddit.com/r/lavaporn/",
+    "#class"   : reddit.RedditSubredditExtractor,
+},
+
+{
     "#url"     : "https://www.reddit.com/",
     "#category": ("", "reddit", "home"),
     "#class"   : reddit.RedditHomeExtractor,
@@ -89,6 +104,38 @@ __tests__ = (
     "#url"     : "https://www.reddit.com/u/username/",
     "#category": ("", "reddit", "user"),
     "#class"   : reddit.RedditUserExtractor,
+},
+
+{
+    "#url"     : "https://www.reddit.com/user/SeichiScout/submitted/?sort=hot",
+    "#category": ("", "reddit", "user-submitted"),
+    "#class"   : reddit.RedditUserExtractor,
+    "#pattern" : r"https://i\.redd\.it/\w+\.jpg",
+    "#range"   : "1-25",
+    "#count"   : 25,
+    "#archive" : False,
+
+    "author"          : "SeichiScout",
+    "author_fullname" : "t2_l8qpy6td6",
+    "user"            : {
+        "created_utc" : 1724480738.0,
+        "id"          : "l8qpy6td6",
+        "name"        : "SeichiScout",
+        "verified"    : True,
+    },
+},
+
+{
+    "#url"     : "https://www.old.reddit.com/user/username/",
+    "#class"   : reddit.RedditUserExtractor,
+},
+
+{
+    "#url"     : "https://www.reddit.com/user/Leac-/submitted/?sort=new",
+    "#comment" : "suspended user (#9177)",
+    "#category": ("", "reddit", "user-submitted"),
+    "#class"   : reddit.RedditUserExtractor,
+    "#exception": "NotFoundError:Suspended User",
 },
 
 {
@@ -285,6 +332,21 @@ __tests__ = (
 },
 
 {
+    "#url"     : "https://www.reddit.com/r/vi/comments/1qi6tev/comment/o0v9zh8/",
+    "#comment" : "'external-preview' embed",
+    "#class"   : reddit.RedditSubmissionExtractor,
+    "#options" : {"comments": 100},
+    "#range"   : "2",
+    "#pattern" : r"https://external-preview.redd.it/0DT-wjorv2NNSSoTW-62QG4xs7ZqGE2jcn2OEa2Xnks\.gif\?width=200&height=200&s=\w+",
+    "#sha1_content": "5014a016d7d5fb2c9fdaa01f0b43afeff158cd9b",
+},
+
+{
+    "#url"     : "https://www.old.reddit.com/r/lavaporn/comments/2a00np/",
+    "#class"   : reddit.RedditSubmissionExtractor,
+},
+
+{
     "#url"     : "https://i.redd.it/upjtjcx2npzz.jpg",
     "#category": ("", "reddit", "image"),
     "#class"   : reddit.RedditImageExtractor,
@@ -330,6 +392,11 @@ __tests__ = (
     "#category": ("", "reddit", "redirect"),
     "#class"   : reddit.RedditRedirectExtractor,
     "#pattern" : r"^https://www.reddit.com/user/Tailhook91/comments/znfxbr/prove_it/",
+},
+
+{
+    "#url"     : "https://www.old.reddit.com/user/Tailhook91/s/w4yAMbtOYm",
+    "#class"   : reddit.RedditRedirectExtractor,
 },
 
 )

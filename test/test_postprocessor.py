@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright 2019-2025 Mike Fährmann
+# Copyright 2019-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -38,6 +38,7 @@ class FakeJob():
         self.out = output.NullOutput()
         self.get_logger = logging.getLogger
         self.hooks = collections.defaultdict(list)
+        self.status = 0
 
     def register_hooks(self, hooks, options=None):
         for hook, callback in hooks.items():
@@ -51,6 +52,8 @@ class TestPostprocessorModule(unittest.TestCase):
 
     def test_find(self):
         for name in (postprocessor.modules):
+            if name == "fs":
+                name = "filesystem"
             cls = postprocessor.find(name)
             self.assertEqual(cls.__name__, f"{name.capitalize()}PP")
             self.assertIs(cls.__base__, PostProcessor)
@@ -89,6 +92,7 @@ class BasePostprocessorTest(unittest.TestCase):
 
     def tearDown(self):
         self.job.hooks.clear()
+        self.job.status = 0
 
     def _create(self, options=None, data=None):
         kwdict = {"category": "test", "filename": "file", "extension": "ext"}
@@ -109,6 +113,39 @@ class BasePostprocessorTest(unittest.TestCase):
         for event in (events or ("prepare", "file")):
             for callback in self.job.hooks[event]:
                 callback(self.pathfmt)
+
+    def _output(self, mock):
+        return "".join(
+            call[1][0]
+            for call in mock.mock_calls
+            if call[0].endswith("write")
+        )
+
+
+class ActionsTest(BasePostprocessorTest):
+
+    def test_raises(self):
+        self._create({"action": "raise AbortExtraction foobar"})
+
+        with self.assertRaises(exception.AbortExtraction) as cm:
+            self._trigger()
+
+        self.assertEqual(str(cm.exception), "foobar")
+
+    def test_print(self):
+        self._create({"action": "print Hello World"})
+
+        with patch("sys.stdout") as m:
+            self._trigger()
+
+        self.assertEqual(self._output(m), "Hello World\n")
+
+    def test_status(self):
+        self._create({"action": "status = 123"})
+
+        self.assertEqual(self.job.status, 0)
+        self._trigger()
+        self.assertEqual(self.job.status, 123)
 
 
 class ClassifyTest(BasePostprocessorTest):
@@ -196,7 +233,8 @@ class ExecTest(BasePostprocessorTest):
 
     def test_command_string(self):
         self._create({
-            "command": "echo {} {_path} {_temppath} {_directory} {_filename} "
+            "command": "echo {} {_path} {_path_unc} {_temppath} "
+                       "{_directory} {_directory_unc} {_filename} "
                        "&& rm {};",
         })
 
@@ -208,15 +246,18 @@ class ExecTest(BasePostprocessorTest):
 
         p.assert_called_once_with(
             (f"echo "
-             f"{self.pathfmt.realpath} "
+             f"{self.pathfmt.path} "
+             f"{self.pathfmt.path} "
              f"{self.pathfmt.realpath} "
              f"{self.pathfmt.temppath} "
+             f"{self.pathfmt.directory} "
              f"{self.pathfmt.realdirectory} "
              f"{self.pathfmt.filename} "
-             f"&& rm {self.pathfmt.realpath};"),
+             f"&& rm {self.pathfmt.path};"),
             shell=True,
             creationflags=0,
             start_new_session=False,
+            stdout=None, stderr=None,
         )
         i.wait.assert_called_once_with()
 
@@ -241,6 +282,7 @@ class ExecTest(BasePostprocessorTest):
             shell=False,
             creationflags=0,
             start_new_session=False,
+            stdout=None, stderr=None,
         )
 
     def test_command_many(self):
@@ -270,6 +312,7 @@ class ExecTest(BasePostprocessorTest):
                 shell=True,
                 creationflags=0,
                 start_new_session=False,
+                stdout=None, stderr=None,
             ),
             call(
                 [
@@ -280,6 +323,7 @@ class ExecTest(BasePostprocessorTest):
                 shell=False,
                 creationflags=0,
                 start_new_session=False,
+                stdout=None, stderr=None,
             ),
         ])
 
@@ -333,6 +377,7 @@ class ExecTest(BasePostprocessorTest):
             shell=False,
             creationflags=0,
             start_new_session=True,
+            stdout=None, stderr=None,
         )
         i.wait.assert_called_once_with()
 
@@ -355,6 +400,7 @@ class ExecTest(BasePostprocessorTest):
             shell=False,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
             start_new_session=False,
+            stdout=None, stderr=None,
         )
         i.wait.assert_called_once_with()
 
@@ -409,6 +455,57 @@ class ExecTest(BasePostprocessorTest):
         self.assertEqual(log_info.output[0], msg)
         self.assertIn("'echo' returned with non-zero ", log_info.output[1])
 
+    def test_opt_success(self):
+        self._create({
+            "command": "echo foo bar",
+            "success": "status = 11",
+        })
+
+        self.assertEqual(self.job.status, 0)
+        with patch("gallery_dl.util.Popen") as p:
+            p.return_value = i = Mock()
+            i.wait.return_value = 0
+            self._trigger(("after",))
+        self.assertEqual(self.job.status, 11)
+
+    def test_opt_error(self):
+        self._create({
+            "command": "echo foo bar",
+            "success": "status = 11",
+            "error"  : "status = 23",
+        })
+
+        self.assertEqual(self.job.status, 0)
+        with patch("gallery_dl.util.Popen") as p, \
+                self.assertLogs(level=10) as log_info:
+            p.return_value = i = Mock()
+            i.wait.return_value = 1  # non-zero exit status
+            self._trigger(("after",))
+        self.assertEqual(self.job.status, 23)
+        self.assertIn("'echo foo bar' returned with non-zero ",
+                      log_info.output[1])
+
+    def test_opt_output(self):
+        self._create({
+            "command": ["echo", "foobar"],
+            "output" : False,
+        })
+
+        with patch("gallery_dl.util.Popen") as p:
+            p.return_value = i = Mock()
+            i.wait.return_value = 0
+            self._trigger(("after",))
+
+        import subprocess
+        p.assert_called_once_with(
+            ["echo", "foobar"],
+            shell=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=0,
+            start_new_session=False,
+        )
+
 
 class HashTest(BasePostprocessorTest):
 
@@ -459,6 +556,23 @@ class HashTest(BasePostprocessorTest):
             "6028f9e6957f4ca929941318c4bba6258713fd5162f9e33bd10e1c456d252700"
             "3e1095b50736c4fd1e2deea152e3c8ecd5993462a747208e4d842659935a1c62",
             kwdict["b"], "sha512")
+
+    def test_mode(self):
+        self._create({"mode": "sha256,sha512"})
+
+        with self.pathfmt.open() as fp:
+            fp.write(b"Foo Bar\n")
+
+        self._trigger()
+
+        kwdict = self.pathfmt.kwdict
+        self.assertEqual(
+            "4775b55be17206445d7015a5fc7656f38a74b880670523c3b175455f885f2395",
+            kwdict["sha256"], "sha256")
+        self.assertEqual(
+            "6028f9e6957f4ca929941318c4bba6258713fd5162f9e33bd10e1c456d252700"
+            "3e1095b50736c4fd1e2deea152e3c8ecd5993462a747208e4d842659935a1c62",
+            kwdict["sha512"], "sha512")
 
 
 class MetadataTest(BasePostprocessorTest):
@@ -576,15 +690,6 @@ class MetadataTest(BasePostprocessorTest):
             self._trigger()
         self.assertEqual(self._output(m), "foo\nbar\nbaz\n")
 
-    def test_metadata_tags_dict(self):
-        self._create(
-            {"mode": "tags"},
-            {"tags": {"g": ["foobar1", "foobar2"], "m": ["foobarbaz"]}},
-        )
-        with patch("builtins.open", mock_open()) as m:
-            self._trigger()
-        self.assertEqual(self._output(m), "foobar1\nfoobar2\nfoobarbaz\n")
-
     def test_metadata_tags_list_of_dict(self):
         self._create(
             {"mode": "tags"},
@@ -620,7 +725,7 @@ class MetadataTest(BasePostprocessorTest):
             {"foo": "bar"},
         )
 
-        with patch("sys.stdout", Mock()) as m:
+        with patch("sys.stdout") as m:
             self._trigger()
 
         self.assertEqual(self._output(m), "bar\nNone\n")
@@ -743,7 +848,7 @@ class MetadataTest(BasePostprocessorTest):
     def test_metadata_stdout(self):
         self._create({"filename": "-", "indent": None, "sort": True})
 
-        with patch("sys.stdout", Mock()) as m:
+        with patch("sys.stdout") as m:
             self._trigger()
 
         self.assertEqual(self._output(m), """\
@@ -907,13 +1012,6 @@ class MetadataTest(BasePostprocessorTest):
 
         m_aa.assert_called_once_with(self.pathfmt.kwdict)
         m_ac.assert_called_once()
-
-    def _output(self, mock):
-        return "".join(
-            call[1][0]
-            for call in mock.mock_calls
-            if call[0].endswith("write")
-        )
 
 
 class MtimeTest(BasePostprocessorTest):

@@ -7,8 +7,7 @@
 """Extractors for Misskey instances"""
 
 from .common import BaseExtractor, Message, Dispatch
-from .. import text, dt, exception
-from ..cache import memcache
+from .. import text, dt
 
 
 class MisskeyExtractor(BaseExtractor):
@@ -224,8 +223,10 @@ class MisskeyAPI():
         data = {"userId": user_id}
         return self._pagination(endpoint, data)
 
-    @memcache(keyarg=1)
     def users_show(self, username):
+        return self.extractor.cache(self._users_show_impl, username)
+
+    def _users_show_impl(self, username):
         endpoint = "/users/show"
         username, _, host = username.partition("@")
         data = {"username": username, "host": host or None}
@@ -239,7 +240,7 @@ class MisskeyAPI():
     def i_favorites(self):
         endpoint = "/i/favorites"
         if not self.access_token:
-            raise exception.AuthenticationError()
+            raise self.extractor.exc.AuthenticationError()
         data = {"i": self.access_token}
         return self._pagination(endpoint, data)
 
@@ -255,7 +256,7 @@ class MisskeyAPI():
 
         date_min, date_max = extr._get_date_min_max()
         if (order := extr.config("order-posts")) and \
-                order[0] in ("a", "r"):
+                order[0] in {"a", "r"}:
             key = "sinceId"
             data["sinceDate"] = 1 if date_min is None else date_min * 1000
             date_stop = None if date_max is None else date_max

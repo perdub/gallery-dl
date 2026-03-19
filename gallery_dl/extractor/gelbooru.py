@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2014-2025 Mike Fährmann
+# Copyright 2014-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -10,7 +10,7 @@
 
 from .common import Extractor, Message
 from . import gelbooru_v02
-from .. import text, exception
+from .. import text
 import binascii
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?gelbooru\.com/(?:index\.php)?\?"
@@ -33,9 +33,9 @@ class GelbooruBase():
         url = self.root + "/index.php?page=dapi&q=index&json=1"
         try:
             data = self.request_json(url, params=params)
-        except exception.HttpError as exc:
+        except self.exc.HttpError as exc:
             if exc.status == 401:
-                raise exception.AuthRequired(
+                raise self.exc.AuthRequired(
                     "'api-key' & 'user-id'", "the API")
             raise
 
@@ -156,10 +156,9 @@ class GelbooruPoolExtractor(GelbooruBase,
                             gelbooru_v02.GelbooruV02PoolExtractor):
     """Extractor for gelbooru pools"""
     per_page = 45
+    skip_files = GelbooruBase._skip_offset
     pattern = BASE_PATTERN + r"page=pool&s=show&id=(\d+)"
     example = "https://gelbooru.com/index.php?page=pool&s=show&id=12345"
-
-    skip = GelbooruBase._skip_offset
 
     def metadata(self):
         url = self.root + "/index.php"
@@ -172,7 +171,7 @@ class GelbooruPoolExtractor(GelbooruBase,
 
         name, pos = text.extract(page, "<h3>Now Viewing: ", "</h3>")
         if not name:
-            raise exception.NotFoundError("pool")
+            raise self.exc.NotFoundError("pool")
 
         return {
             "pool": text.parse_int(self.pool_id),
@@ -187,10 +186,9 @@ class GelbooruFavoriteExtractor(GelbooruBase,
                                 gelbooru_v02.GelbooruV02FavoriteExtractor):
     """Extractor for gelbooru favorites"""
     per_page = 100
+    skip_files = GelbooruBase._skip_offset
     pattern = BASE_PATTERN + r"page=favorites&s=view&id=(\d+)"
     example = "https://gelbooru.com/index.php?page=favorites&s=view&id=12345"
-
-    skip = GelbooruBase._skip_offset
 
     def posts(self):
         # get number of favorites
@@ -217,7 +215,7 @@ class GelbooruFavoriteExtractor(GelbooruBase,
                            "a" if order > 0 else "de")
 
         order_favs = self.config("order-posts")
-        if order_favs and order_favs[0] in ("r", "a"):
+        if order_favs and order_favs[0] in {"r", "a"}:
             self.log.debug("Returning them in reverse")
             order = -order
 

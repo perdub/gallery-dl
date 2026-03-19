@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2016-2025 Mike Fährmann
+# Copyright 2016-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -8,8 +8,8 @@
 
 """Extractors for https://readcomiconline.li/"""
 
-from .common import Extractor, ChapterExtractor, MangaExtractor
-from .. import text, exception
+from .common import Extractor, ChapterExtractor, MangaExtractor, Message
+from .. import text
 import binascii
 
 BASE_PATTERN = r"(?i)(?:https?://)?(?:www\.)?readcomiconline\.(?:li|to)"
@@ -36,7 +36,7 @@ class ReadcomiconlineBase():
                     "the CAPTCHA, and press ENTER to continue", response.url)
                 self.input()
             else:
-                raise exception.AbortExtraction(
+                raise self.exc.AbortExtraction(
                     f"Redirect to \n{response.url}\nVisit this URL in your "
                     f"browser and solve the CAPTCHA to continue")
 
@@ -121,6 +121,40 @@ class ReadcomiconlineComicExtractor(ReadcomiconlineBase, MangaExtractor):
                 "lang": "en", "language": "English",
             }))
         return results
+
+
+class ReadcomiconlineTagExtractor(ReadcomiconlineBase, Extractor):
+    """Extractor for comics from readcomiconline.li lists"""
+    subcategory = "tag"
+    pattern = (BASE_PATTERN +
+               r"(/(Artist|Genre|Publisher|Writer|)/([^/?#]+)(?:/[^/?#]+)?)")
+    example = "https://readcomiconline.li/Artist/NAME"
+
+    def __init__(self, match):
+        self.subcategory = match[2].lower()
+        Extractor.__init__(self, match)
+
+    def items(self):
+        path, _, name = self.groups
+        self.kwdict["search_tags"] = text.unquote(name)
+
+        self.cookies.set("list-view", "list", domain=self.root[8:])
+
+        base = self.root + "/Comic/"
+        data = {"_extractor": ReadcomiconlineComicExtractor}
+        url = f"{self.root}/{path}"
+        params = {"page": 1}
+
+        while True:
+            page = self.request(url, params=params).text
+
+            for href in text.extract_iter(page, '<a href="/Comic/', '"'):
+                if "?id=" not in href:
+                    yield Message.Queue, base + href, data
+
+            if ">&rsaquo; Next <" not in page:
+                break
+            params["page"] += 1
 
 
 def baeu(url, root="", root_blogspot="https://2.bp.blogspot.com"):

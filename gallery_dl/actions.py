@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2023-2025 Mike Fährmann
+# Copyright 2023-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -13,6 +13,24 @@ import logging
 import operator
 import functools
 from . import util, exception
+
+
+def parse(spec):
+    if isinstance(spec, str):
+        type, _, args = spec.partition(" ")
+        before, after = ACTIONS[type](args)
+        return before if after is None else after
+
+    actions_before, actions_after = [], []
+    for s in spec:
+        type, _, args = s.partition(" ")
+        before, after = ACTIONS[type](args)
+        if before is not None:
+            actions_before.append(before)
+        if after is not None:
+            actions_after.append(after)
+    actions_before.extend(actions_after)
+    return _chain_actions(actions_before)
 
 
 def parse_logging(actionspec):
@@ -85,27 +103,7 @@ def parse_signals(actionspec):
             log = logging.getLogger("gallery-dl")
             log.warning("signal '%s' is not defined", signal_name)
             continue
-
-        if isinstance(spec, str):
-            type, _, args = spec.partition(" ")
-            before, after = ACTIONS[type](args)
-            action = before if after is None else after
-        else:
-            actions_before = []
-            actions_after = []
-            for s in spec:
-                type, _, args = s.partition(" ")
-                before, after = ACTIONS[type](args)
-                if before is not None:
-                    actions_before.append(before)
-                if after is not None:
-                    actions_after.append(after)
-
-            actions = actions_before
-            actions.extend(actions_after)
-            action = _chain_actions(actions)
-
-        signal.signal(signal_num, signals_handler(action))
+        signal.signal(signal_num, signals_handler(parse(spec)))
 
 
 class LoggerAdapter():
@@ -235,13 +233,27 @@ def action_flag(opts):
     if value is None:
         value = "stop"
     elif value == "skip":
-        value = "stop" if flag == "DOWNLOAD" else False
+        value = False
     else:
         value = value.lower()
 
     def _flag(args):
         util.FLAGS.__dict__[flag] = value
     return _flag, None
+
+
+def action_keyword(opts):
+    name, _, value = opts.partition(" ")
+
+    try:
+        value = value.strip()
+        value = util.json_loads(value)
+    except Exception:
+        pass
+
+    def _keyword(args):
+        args["job"].kwdict[name] = value
+    return _keyword, None
 
 
 def action_raise(opts):
@@ -296,6 +308,7 @@ ACTIONS = {
     "exec"     : action_exec,
     "exit"     : action_exit,
     "flag"     : action_flag,
+    "keyword"  : action_keyword,
     "level"    : action_level,
     "print"    : action_print,
     "raise"    : action_raise,

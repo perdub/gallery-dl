@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2015-2025 Mike Fährmann
+# Copyright 2015-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for nijie instances"""
 
 from .common import BaseExtractor, Message, Dispatch, AsynchronousMixin
-from .. import text, dt, exception
-from ..cache import cache
+from .. import text, dt
 
 
 class NijieExtractor(AsynchronousMixin, BaseExtractor):
@@ -132,11 +131,12 @@ class NijieExtractor(AsynchronousMixin, BaseExtractor):
 
         username, password = self._get_auth_info()
         if username:
-            return self.cookies_update(self._login_impl(username, password))
+            return self.cookies_update(self.cache(
+                self._login_impl, username, password,
+                _exp=90*86400, _mem=False))
 
-        raise exception.AuthenticationError("Username and password required")
+        raise self.exc.AuthenticationError("Username and password required")
 
-    @cache(maxage=90*86400, keyarg=1)
     def _login_impl(self, username, password):
         self.log.info("Logging in as %s", username)
 
@@ -145,7 +145,7 @@ class NijieExtractor(AsynchronousMixin, BaseExtractor):
 
         response = self.request(url, method="POST", data=data)
         if "/login.php" in response.text:
-            raise exception.AuthenticationError()
+            raise self.exc.AuthenticationError()
         return self.cookies
 
     def _pagination(self, path):

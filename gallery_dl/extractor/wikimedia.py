@@ -10,8 +10,7 @@
 """Extractors for Wikimedia sites"""
 
 from .common import BaseExtractor, Message
-from .. import text, util, exception
-from ..cache import cache
+from .. import text, util
 
 
 class WikimediaExtractor(BaseExtractor):
@@ -30,7 +29,7 @@ class WikimediaExtractor(BaseExtractor):
             labels = self.root.split(".")
             self.lang = labels[-3][-2:]
             self.category = labels[-2]
-        elif self.category in ("fandom", "wikigg"):
+        elif self.category in {"fandom", "wikigg"}:
             self.lang = "en"
             self.format = "original"
             self.basesubcategory = self.category
@@ -63,7 +62,6 @@ class WikimediaExtractor(BaseExtractor):
         self.per_page = self.config("limit", 50)
         self.subcategories = False
 
-    @cache(maxage=36500*86400, keyarg=1)
     def _search_api_path(self, root):
         self.log.debug("Probing possible API endpoints")
         for path in ("/api.php", "/w/api.php", "/wiki/api.php"):
@@ -71,7 +69,7 @@ class WikimediaExtractor(BaseExtractor):
             response = self.request(url, method="HEAD", fatal=None)
             if response.status_code < 400:
                 return url
-        raise exception.AbortExtraction("Unable to find API endpoint")
+        raise self.exc.AbortExtraction("Unable to find API endpoint")
 
     def prepare_info(self, info):
         """Adjust the content of an image info object"""
@@ -136,9 +134,8 @@ class WikimediaExtractor(BaseExtractor):
         https://opendata.stackexchange.com/questions/13381
         """
 
-        url = self.api_url
-        if not url:
-            url = self._search_api_path(self.root)
+        url = self.api_url or \
+            self.cache(self._search_api_path, self.root, _mem=False)
 
         params["action"] = "query"
         params["format"] = "json"
@@ -230,6 +227,11 @@ BASE_PATTERN = WikimediaExtractor.update({
         "api-path": "/w/api.php",
         "useragent": "Googlebot-Image/1.0",
     },
+    "mgewiki": {
+        "root": "https://mgewiki.moe",
+        "pattern": r"(?:www\.)?mgewiki\.moe",
+        "api-path": "/api.php",
+    },
 })
 
 
@@ -250,6 +252,8 @@ class WikimediaArticleExtractor(WikimediaExtractor):
             path = path[3:]
         if path.startswith("wiki/"):
             path = path[5:]
+        elif path.startswith("index.php/"):
+            path = path[10:]
         self.path = text.unquote(path)
 
         pre, sep, _ = path.partition(":")

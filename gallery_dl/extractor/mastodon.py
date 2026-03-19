@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2019-2025 Mike Fährmann
+# Copyright 2019-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for Mastodon instances"""
 
 from .common import BaseExtractor, Message
-from .. import text, exception
-from ..cache import cache
+from .. import text
 
 
 class MastodonExtractor(BaseExtractor):
@@ -215,10 +214,12 @@ class MastodonAPI():
     def __init__(self, extractor):
         self.root = extractor.root
         self.extractor = extractor
+        self.exc = extractor.exc
 
         access_token = extractor.config("access-token")
         if access_token is None or access_token == "cache":
-            access_token = _access_token_cache(extractor.instance)
+            access_token = self.extractor.cache(
+                _access_token_cache, extractor.instance, _mem=False)
         if not access_token:
             access_token = extractor.config_instance("access-token")
 
@@ -246,7 +247,7 @@ class MastodonAPI():
             if account["acct"] == username:
                 self.extractor._check_moved(account)
                 return account["id"]
-        raise exception.NotFoundError("account")
+        raise self.exc.NotFoundError("account")
 
     def account_bookmarks(self):
         """Statuses the user has bookmarked"""
@@ -312,16 +313,16 @@ class MastodonAPI():
             if code < 400:
                 return response
             if code == 401:
-                raise exception.AbortExtraction(
+                raise self.exc.AbortExtraction(
                     f"Invalid or missing access token.\nRun 'gallery-dl oauth:"
                     f"mastodon:{self.extractor.instance}' to obtain one.")
             if code == 404:
-                raise exception.NotFoundError()
+                raise self.exc.NotFoundError()
             if code == 429:
                 self.extractor.wait(until=self.extractor.parse_datetime_iso(
                     response.headers["x-ratelimit-reset"]))
                 continue
-            raise exception.AbortExtraction(response.json().get("error"))
+            raise self.exc.AbortExtraction(response.json().get("error"))
 
     def _pagination(self, endpoint, params):
         url = endpoint
@@ -336,6 +337,5 @@ class MastodonAPI():
             params = None
 
 
-@cache(maxage=36500*86400, keyarg=0)
 def _access_token_cache(instance):
     return None

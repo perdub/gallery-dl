@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2018-2025 Mike Fährmann
+# Copyright 2018-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,7 +9,7 @@
 """Extractors for https://wallhaven.cc/"""
 
 from .common import Extractor, Message, Dispatch
-from .. import text, exception
+from .. import text
 
 
 class WallhavenExtractor(Extractor):
@@ -199,7 +199,7 @@ class WallhavenAPI():
                 continue
 
             self.extractor.log.debug("Server response: %s", response.text)
-            raise exception.AbortExtraction(
+            raise self.extractor.exc.AbortExtraction(
                 f"API request failed "
                 f"({response.status_code} {response.reason})")
 

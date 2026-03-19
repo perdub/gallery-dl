@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2014-2025 Mike Fährmann
+# Copyright 2014-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -10,7 +10,6 @@
 
 from .common import Extractor, Message
 from . import danbooru
-from ..cache import memcache
 from .. import text, util
 
 
@@ -46,12 +45,19 @@ class E621Extractor(danbooru.DanbooruExtractor):
                 post["notes"] = self._get_notes(post["id"])
 
             if pools and post["pools"]:
-                post["pools"] = self._get_pools(
-                    ",".join(map(str, post["pools"])))
+                post["pools"] = self.cache(
+                    self._get_pools, ",".join(map(str, post["pools"])))
 
             post["filename"] = file["md5"]
             post["extension"] = file["ext"]
             post["date"] = self.parse_datetime_iso(post["created_at"])
+
+            tags = []
+            for category, tags_cat in post["tags"].items():
+                post["tags_" + category] = tags_cat
+                tags.extend(tags_cat)
+            tags.sort()
+            post["tags"] = tags
 
             post.update(data)
             yield Message.Directory, "", post
@@ -67,7 +73,6 @@ class E621Extractor(danbooru.DanbooruExtractor):
         return self.request_json(
             f"{self.root}/notes.json?search[post_id]={id}")
 
-    @memcache(keyarg=1)
     def _get_pools(self, ids):
         pools = self.request_json(
             f"{self.root}/pools.json?search[id]={ids}")
@@ -125,11 +130,12 @@ class E621PoolExtractor(E621Extractor, danbooru.DanbooruPoolExtractor):
 
 class E621PostExtractor(E621Extractor, danbooru.DanbooruPostExtractor):
     """Extractor for single e621 posts"""
-    pattern = BASE_PATTERN + r"/post(?:s|/show)/(\d+)"
+    pattern = BASE_PATTERN + r"/p(?:ost(?:s|/show)/(\d+)|/(\w+))"
     example = "https://e621.net/posts/12345"
 
     def posts(self):
-        url = f"{self.root}/posts/{self.groups[-1]}.json"
+        pid = self.groups[-2] or int(self.groups[-1], 32)
+        url = f"{self.root}/posts/{pid}.json"
         return (self.request_json(url)["post"],)
 
 

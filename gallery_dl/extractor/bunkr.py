@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2022-2025 Mike Fährmann
+# Copyright 2022-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -10,8 +10,7 @@
 
 from .common import Extractor
 from .lolisafe import LolisafeAlbumExtractor
-from .. import text, util, config, exception
-from ..cache import memcache
+from .. import text, util, config
 import random
 
 if config.get(("extractor", "bunkr"), "tlds"):
@@ -85,7 +84,7 @@ class BunkrAlbumExtractor(LolisafeAlbumExtractor):
         self.endpoint = endpoint
         self.offset = 0
 
-    def skip(self, num):
+    def skip_files(self, num):
         self.offset = num
         return num
 
@@ -110,7 +109,7 @@ class BunkrAlbumExtractor(LolisafeAlbumExtractor):
                 self.log.debug("Redirect to known CF challenge domain '%s'",
                                root)
 
-            except exception.HttpError as exc:
+            except self.exc.HttpError as exc:
                 if exc.status != 403:
                     raise
 
@@ -125,7 +124,7 @@ class BunkrAlbumExtractor(LolisafeAlbumExtractor):
                     pass
                 else:
                     if not DOMAINS:
-                        raise exception.AbortExtraction(
+                        raise self.exc.AbortExtraction(
                             "All Bunkr domains require solving a CF challenge")
 
             # select alternative domain
@@ -172,15 +171,15 @@ class BunkrAlbumExtractor(LolisafeAlbumExtractor):
                     item, 'timestamp: "', '"'), "%H:%M:%S %d/%m/%Y")
 
                 yield file
-            except exception.ControlException:
+            except self.exc.ControlException:
                 raise
             except Exception as exc:
                 self.log.error("%s: %s", exc.__class__.__name__, exc)
                 self.log.debug("%s", item, exc_info=exc)
-                if isinstance(exc, exception.HttpError) and \
+                if isinstance(exc, self.exc.HttpError) and \
                         exc.status == 400 and \
                         exc.response.url.startswith(self.root_api):
-                    raise exception.AbortExtraction("Album deleted")
+                    raise self.exc.AbortExtraction("Album deleted")
 
     def _extract_file(self, data_id):
         referer = f"{self.root_dl}/file/{data_id}"
@@ -233,8 +232,8 @@ class BunkrMediaExtractor(BunkrAlbumExtractor):
             self.log.error("%s: %s", exc.__class__.__name__, exc)
             return (), {}
 
-        album_id, album_name, album_size = self._album_info(text.extr(
-            page, ' href="../a/', '"'))
+        album_id, album_name, album_size = self.cache(
+            self._album_info, text.extr(page, ' href="../a/', '"'))
         return (file,), {
             "album_id"  : album_id,
             "album_name": album_name,
@@ -242,7 +241,6 @@ class BunkrMediaExtractor(BunkrAlbumExtractor):
             "count"     : 1,
         }
 
-    @memcache(keyarg=1)
     def _album_info(self, album_id):
         if album_id:
             try:

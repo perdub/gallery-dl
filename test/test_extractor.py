@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright 2018-2025 Mike Fährmann
+# Copyright 2018-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -16,7 +16,7 @@ import time
 import string
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from gallery_dl import extractor, util, dt, config  # noqa E402
+from gallery_dl import extractor, util, dt, config, cache  # noqa E402
 from gallery_dl.extractor import mastodon  # noqa E402
 from gallery_dl.extractor.common import Extractor, Message  # noqa E402
 from gallery_dl.extractor.directlink import DirectlinkExtractor  # noqa E402
@@ -31,6 +31,15 @@ try:
         from test import results
 except ImportError:
     results = None
+
+
+def setUpModule():
+    if cache.DATABASE is None:
+        import atexit
+        import tempfile
+        dbpath = tempfile.mkstemp()[1]
+        config.set(("cache",), "file", dbpath)
+        atexit.register(util.remove_file, dbpath)
 
 
 class FakeExtractor(Extractor):
@@ -119,12 +128,14 @@ class TestExtractorModule(unittest.TestCase):
 
         try:
             extr = cls.from_url(url)
+            find = extractor.find(url)
         except ImportError as exc:
             if exc.name in ("youtube_dl", "yt_dlp"):
                 return sys.stdout.write(
                     f"Skipping '{cls.category}' category checks\n")
             raise
         self.assertTrue(extr, url)
+        self.assertIs(extr.__class__, find.__class__, url)
 
         categories = result.get("#category")
         if categories:
@@ -215,7 +226,23 @@ class TestExtractorWait(unittest.TestCase):
 
             calls = log.info.mock_calls
             self.assertEqual(len(calls), 1)
-            self._assert_isotime(calls[0][1][1], until)
+            self.assertEqual(calls[0][1][1], "6 seconds")
+            self._assert_isotime(calls[0][1][2], until)
+
+    def test_wait_seconds_long(self):
+        extr = extractor.find("generic:https://example.org/")
+        seconds = 5000
+        until = time.time() + seconds
+
+        with patch("time.sleep") as sleep, patch.object(extr, "log") as log:
+            extr.wait(seconds=seconds)
+
+            sleep.assert_called_once_with(5001.0)
+
+            calls = log.info.mock_calls
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][1][1], "1h 23min")
+            self._assert_isotime(calls[0][1][2], until)
 
     def test_wait_until(self):
         extr = extractor.find("generic:https://example.org/")
@@ -230,7 +257,8 @@ class TestExtractorWait(unittest.TestCase):
 
             calls = log.info.mock_calls
             self.assertEqual(len(calls), 1)
-            self._assert_isotime(calls[0][1][1], until)
+            self.assertEqual(calls[0][1][1], "5 seconds")
+            self._assert_isotime(calls[0][1][2], until)
 
     def test_wait_until_datetime(self):
         extr = extractor.find("generic:https://example.org/")
@@ -249,7 +277,8 @@ class TestExtractorWait(unittest.TestCase):
 
             calls = log.info.mock_calls
             self.assertEqual(len(calls), 1)
-            self._assert_isotime(calls[0][1][1], until_local)
+            self.assertEqual(calls[0][1][1], "5 seconds")
+            self._assert_isotime(calls[0][1][2], until_local)
 
     def _assert_isotime(self, output, until):
         if not isinstance(until, dt.datetime):
@@ -313,13 +342,12 @@ class TextExtractorCommonDateminmax(unittest.TestCase):
         self.assertEqual(
             log_info.output[0],
             "WARNING:generic:Unable to parse 'date-max': "
-            "Invalid isoformat string '2010-01'")
+            "Invalid ISO 8601 date/time value '2010-01'")
 
-    def test_date_min_max_fmt(self):
+    def test_date_min_max(self):
         extr = extractor.find("generic:https://example.org/")
-        config.set((), "date-format", "%B %d %Y")
-        config.set((), "date-min", "January 01 2010")
-        config.set((), "date-max", "August 18 2022")
+        config.set((), "date-min", "2010-01-01")
+        config.set((), "date-max", "2022-08-18")
 
         dmin, dmax = extr._get_date_min_max()
         self.assertEqual(dmin, 1262304000)
@@ -327,8 +355,7 @@ class TextExtractorCommonDateminmax(unittest.TestCase):
 
     def test_date_min_max_mix(self):
         extr = extractor.find("generic:https://example.org/")
-        config.set((), "date-format", "%B %d %Y")
-        config.set((), "date-min", "January 01 2010")
+        config.set((), "date-min", "2010-01-01")
         config.set((), "date-max", 1262304061)
 
         dmin, dmax = extr._get_date_min_max()
@@ -371,11 +398,13 @@ class TextExtractorOAuth(unittest.TestCase):
 
         with patch.object(extr, "_oauth2_authorization_code_grant") as m, \
                 patch.object(extr, "_register") as r:
+            r.__name__ = "_register"
             r.return_value = {
                 "client-id"    : "foo",
                 "client-secret": "bar",
             }
 
+            extr.cache_update(r, "example.com", None)
             for msg in extr:
                 pass
 

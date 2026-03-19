@@ -7,7 +7,7 @@
 """Extractors for https://discord.com/"""
 
 from .common import Extractor, Message
-from .. import text, exception
+from .. import text, dt
 
 BASE_PATTERN = r"(?:https?://)?discord\.com"
 
@@ -29,6 +29,7 @@ class DiscordExtractor(Extractor):
         self.enabled_embeds = self.config("embeds", ["image", "gifv", "video"])
         self.enabled_threads = self.config("threads", True)
         self.api = DiscordAPI(self)
+        self.max_id = None
 
     def extract_message_text(self, message):
         text_content = [message["content"]]
@@ -60,7 +61,7 @@ class DiscordExtractor(Extractor):
 
     def extract_message(self, message):
         # https://discord.com/developers/docs/resources/message#message-object-message-types
-        if message["type"] in (0, 19, 21):
+        if message["type"] in {0, 19, 21}:
             message_metadata = {}
             message_metadata.update(self.server_metadata)
             message_metadata.update(
@@ -92,7 +93,7 @@ class DiscordExtractor(Extractor):
             message_snapshots = [message]
             message_snapshots.extend(
                 msg["message"] for msg in message.get("message_snapshots", [])
-                if msg["message"]["type"] in (0, 19, 21)
+                if msg["message"]["type"] in {0, 19, 21}
             )
 
             for snapshot in message_snapshots:
@@ -153,24 +154,24 @@ class DiscordExtractor(Extractor):
             )
 
             # https://discord.com/developers/docs/resources/channel#channel-object-channel-types
-            if channel_type in (0, 5):
+            if channel_type in {0, 5}:
                 yield from self.extract_channel_text(channel_id)
                 if self.enabled_threads:
                     yield from self.extract_channel_threads(channel_id)
-            elif channel_type in (1, 3, 10, 11, 12):
+            elif channel_type in {1, 3, 10, 11, 12}:
                 yield from self.extract_channel_text(channel_id)
-            elif channel_type in (15, 16):
+            elif channel_type in {15, 16}:
                 yield from self.extract_channel_threads(channel_id)
-            elif channel_type in (4,):
+            elif channel_type == 4:
                 for channel in self.server_channels_metadata.copy().values():
                     if channel["parent_id"] == channel_id:
                         yield from self.extract_channel(
                             channel["channel_id"], safe=True)
             elif not safe:
-                raise exception.AbortExtraction(
+                raise self.exc.AbortExtraction(
                     "This channel type is not supported."
                 )
-        except exception.HttpError as exc:
+        except self.exc.HttpError as exc:
             if not (exc.status == 403 and safe):
                 raise
 
@@ -192,7 +193,7 @@ class DiscordExtractor(Extractor):
                 "parent_type": parent_metadata["channel_type"]
             })
 
-        if channel_metadata["channel_type"] in (1, 3):
+        if channel_metadata["channel_type"] in {1, 3}:
             channel_metadata.update({
                 "channel": "DMs",
                 "recipients": (
@@ -340,8 +341,14 @@ class DiscordServerSearchExtractor(DiscordExtractor):
             params["author_id"] = params.pop("from")
         if "in" in params:
             params["channel_id"] = params.pop("in")
+        if self.max_id is not None:
+            params["max_id"] = self.max_id
 
         return self.extract_search(server_id, params)
+
+    def skip_date(self, date):
+        # https://docs.discord.com/developers/reference#snowflakes
+        self.max_id = ((int(dt.to_ts(date)) - 1_420_070_400) * 1000) << 22
 
 
 class DiscordServerExtractor(DiscordExtractor):
@@ -355,7 +362,7 @@ class DiscordServerExtractor(DiscordExtractor):
         self.build_server_and_channels(server_id)
 
         for channel in self.server_channels_metadata.copy().values():
-            if channel["channel_type"] in (0, 5, 15, 16):
+            if channel["channel_type"] in {0, 5, 15, 16}:
                 yield from self.extract_channel(
                     channel["channel_id"], safe=True)
 
@@ -474,7 +481,7 @@ class DiscordAPI():
         try:
             response = self.extractor.request(
                 url, params=params, headers=self.headers)
-        except exception.HttpError as exc:
+        except self.extractor.exc.HttpError as exc:
             if exc.status == 401:
                 self._raise_invalid_token()
             raise
@@ -490,7 +497,8 @@ class DiscordAPI():
             offset += len(data)
 
     def _raise_invalid_token(self):
-        raise exception.AuthenticationError("""Invalid or missing token.
+        raise self.extractor.exc.AuthenticationError("""\
+Invalid or missing token.
 Please provide a valid token following these instructions:
 
 1) Open Discord in your browser (https://discord.com/app);

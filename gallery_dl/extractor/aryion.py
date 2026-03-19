@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2025 Mike Fährmann
+# Copyright 2020-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://aryion.com/"""
 
 from .common import Extractor, Message
-from .. import text, util, dt, exception
-from ..cache import cache
+from .. import text, util, dt
 from email.utils import parsedate_tz
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?aryion\.com/g4"
@@ -37,9 +36,10 @@ class AryionExtractor(Extractor):
 
         username, password = self._get_auth_info()
         if username:
-            self.cookies_update(self._login_impl(username, password))
+            return self.cookies_update(self.cache(
+                self._login_impl, username, password,
+                _exp=14*86400, _mem=False))
 
-    @cache(maxage=14*86400, keyarg=1)
     def _login_impl(self, username, password):
         self.log.info("Logging in as %s", username)
 
@@ -52,7 +52,7 @@ class AryionExtractor(Extractor):
 
         response = self.request(url, method="POST", data=data)
         if b"You have been successfully logged in." not in response.content:
-            raise exception.AuthenticationError()
+            raise self.exc.AuthenticationError()
         return {c: response.cookies[c] for c in self.cookies_names}
 
     def items(self):
@@ -156,11 +156,11 @@ class AryionExtractor(Extractor):
             headers = response.headers
 
             # folder
-            if headers["content-type"] in (
+            if headers["content-type"] in {
                 "application/x-folder",
                 "application/x-comic-folder",
                 "application/x-comic-folder-nomerge",
-            ):
+            }:
                 return False
 
             # get filename from 'Content-Disposition' header
@@ -218,7 +218,7 @@ class AryionGalleryExtractor(AryionExtractor):
         self.offset = 0
         self.recursive = self.config("recursive", True)
 
-    def skip(self, num):
+    def skip_files(self, num):
         if self.recursive:
             return 0
         self.offset += num
@@ -258,7 +258,7 @@ class AryionWatchExtractor(AryionExtractor):
 
     def posts(self):
         if not self.cookies_check(self.cookies_names):
-            raise exception.AuthRequired(
+            raise self.exc.AuthRequired(
                 ("username & password", "authenticated cookies"),
                 "watched Submissions")
         self.cookies.set("g4p_msgpage_style", "plain", domain="aryion.com")

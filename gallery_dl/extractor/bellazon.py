@@ -9,7 +9,7 @@
 """Extractors for https://www.bellazon.com/"""
 
 from .common import Extractor, Message
-from .. import text, exception
+from .. import text
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?bellazon\.com/main"
 
@@ -25,6 +25,7 @@ class BellazonExtractor(Extractor):
 
     def items(self):
         native = (self.root + "/", self.root[6:] + "/")
+        quotes = self.config("quoted", False)
         extract_urls = text.re(
             r'(?s)<('
             r'(?:video .*?<source [^>]*?src|a [^>]*?href)="([^"]+).*?</a>'
@@ -32,16 +33,11 @@ class BellazonExtractor(Extractor):
             r')'
         ).findall
 
-        if self.config("quoted", False):
-            strip_quoted = None
-        else:
-            strip_quoted = text.re(r"(?s)<blockquote .*?</blockquote>").sub
-
         for post in self.posts():
-            if strip_quoted is None:
+            if quotes:
                 urls = extract_urls(post["content"])
             else:
-                urls = extract_urls(strip_quoted("", post["content"]))
+                urls = extract_urls(self._remove_quotes(post["content"]))
 
             data = {"post": post}
             post["count"] = data["count"] = len(urls)
@@ -58,6 +54,7 @@ class BellazonExtractor(Extractor):
                 if url.startswith(native):
                     if (
                         "/uploads/emoticons/" in url or
+                        "/public/style_" in url or
                         "/profile/" in url or
                         "/topic/" in url
                     ):
@@ -75,10 +72,12 @@ class BellazonExtractor(Extractor):
                     dc["id"] = text.extr(info, 'data-fileid="', '"')
                     if ext := text.extr(info, 'data-fileext="', '"'):
                         dc["extension"] = ext
-                    elif "/core/interface/file/attachment.php" in url:
+                    elif ("/core/interface/file/attachment.php" in url or
+                          "/main/index.php?" in url):
                         if not dc["id"]:
-                            dc["id"] = \
-                                url.rpartition("?id=")[2].partition("&")[0]
+                            params = text.parse_query(url[url.find("?")+1:])
+                            dc["id"] = (params.get("id") or
+                                        params.get("attach_id"))
                         if name := text.extr(info, ">", "<").strip():
                             dc["name"] = name = text.unescape(name)
                             text.nameext_from_name(name, dc)
@@ -180,11 +179,13 @@ class BellazonExtractor(Extractor):
             "id": extr('id="elComment_', '"'),
             "author_url": extr(" href='", "'"),
             "date": self.parse_datetime_iso(extr("datetime='", "'")),
-            "content": extr("<!-- Post content -->", "\n\t\t</div>"),
+            "content": extr("<!-- Post content -->", '<menu data-ips-hook='),
         }
 
-        if (pos := post["content"].find(">")) >= 0:
-            post["content"] = post["content"][pos+1:].strip()
+        beg = post["content"].find(">")
+        sig = post["content"].rfind('<div data-role="memberSignature"')
+        end = post["content"].rfind("\n\t\t</div>", 0, sig+1 or None)
+        post["content"] = post["content"][beg+1:end+1].strip()
 
         if url_a := post["author_url"]:
             post["author_id"], _, post["author_slug"] = \
@@ -193,6 +194,15 @@ class BellazonExtractor(Extractor):
             post["author_id"] = post["author_slug"] = ""
 
         return post
+
+    def _remove_quotes(self, content):
+        while "<blockquote" in content:
+            beg = content.index("<blockquote")
+            end = content.index("</blockquote", beg)
+            for _ in range(content.count("<blockquote", beg+11, end)):
+                end = content.index("</blockquote", end+13)
+            content = content[:beg] + content[end+13:]
+        return content
 
 
 class BellazonPostExtractor(BellazonExtractor):
@@ -207,7 +217,7 @@ class BellazonPostExtractor(BellazonExtractor):
 
         pos = page.find('id="elComment_' + post_id)
         if pos < 0:
-            raise exception.NotFoundError("post")
+            raise self.exc.NotFoundError("post")
         html = text.extract(page, "<article ", "</article>", pos-100)[0]
 
         self.kwdict["thread"] = self._parse_thread(page)

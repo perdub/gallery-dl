@@ -7,7 +7,7 @@
 """Extractors for https://fapello.com/"""
 
 from .common import Extractor, Message
-from .. import text, exception
+from .. import text
 
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.)?fapello\.(?:com|su)"
@@ -34,7 +34,7 @@ class FapelloPostExtractor(Extractor):
             self.request(url, allow_redirects=False).text,
             'class="uk-align-center"', "</div>", None)
         if page is None:
-            raise exception.NotFoundError("post")
+            raise self.exc.NotFoundError("post")
 
         data = {
             "model": self.model,
@@ -97,7 +97,7 @@ class FapelloPathExtractor(Extractor):
 
     def items(self):
         num = 1
-        if self.path in ("top-likes", "top-followers"):
+        if self.path in {"top-likes", "top-followers"}:
             data = {"_extractor": FapelloModelExtractor}
         else:
             data = {"_extractor": FapelloPostExtractor}

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2021-2025 Mike Fährmann
+# Copyright 2021-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,7 +9,7 @@
 """Extractors for sites supported by youtube-dl"""
 
 from .common import Extractor, Message
-from .. import ytdl, config, exception
+from .. import ytdl, config
 
 
 class YoutubeDLExtractor(Extractor):
@@ -39,7 +39,7 @@ class YoutubeDLExtractor(Extractor):
                     self.ytdl_ie_key = ie.ie_key()
                     break
             if not generic and self.ytdl_ie_key == "Generic":
-                raise exception.NoExtractorError()
+                raise self.exc.NoExtractorError()
             self.force_generic_extractor = False
 
         if self.ytdl_ie_key == "Generic" and config.interpolate(
@@ -94,9 +94,11 @@ class YoutubeDLExtractor(Extractor):
                 ytdl_instance.get_info_extractor(self.ytdl_ie_key),
                 False, {}, True)
         #  except ytdl_module.utils.YoutubeDLError:
-        #     raise exception.AbortExtraction("Failed to extract video data")
+        #     raise self.exc.AbortExtraction("Failed to extract video data")
+        except self.exc.ControlException:
+            raise
         except Exception as exc:
-            raise exception.AbortExtraction(
+            raise self.exc.AbortExtraction(
                 f"Failed to extract video data "
                 f"({exc.__class__.__name__}: {exc})")
 
@@ -126,13 +128,19 @@ class YoutubeDLExtractor(Extractor):
             if not entry:
                 continue
 
-            if entry.get("_type") in ("url", "url_transparent"):
+            if entry.get("_type") in {"url", "url_transparent"}:
                 try:
                     entry = ytdl_instance.extract_info(
                         entry["url"], False,
                         ie_key=entry.get("ie_key"))
-                except ytdl_module.utils.YoutubeDLError:
-                    continue
+                except self.exc.ControlException:
+                    raise
+                except Exception as exc:
+                    if ytdl_instance.params.get("ignoreerrors"):
+                        continue
+                    raise self.exc.AbortExtraction(
+                        f"Failed to extract playlist entry "
+                        f"({exc.__class__.__name__}: {exc})")
                 if not entry:
                     continue
 

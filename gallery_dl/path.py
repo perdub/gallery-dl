@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2021-2025 Mike Fährmann
+# Copyright 2021-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -96,6 +96,9 @@ class PathFormat():
             restrict = "/"
         elif restrict == "windows":
             restrict = "\\\\|/<>:\"?*"
+        elif restrict == "windows+":
+            restrict = {"\\": "⧹", "|" : "", "/" : "⧸", "<" : "＜", ">" : "＞",
+                        ":" : "：", '"' : "＂", "?" : "？", "*" : "＊"}
         elif restrict == "ascii":
             restrict = "^0-9A-Za-z_."
         elif restrict == "ascii+":
@@ -267,17 +270,21 @@ class PathFormat():
         except Exception as exc:
             raise exception.FilenameFormatError(exc)
 
-    def build_directory(self, kwdict):
+    def build_directory(self, kwdict, segments=None):
         """Apply 'kwdict' to directory format strings"""
         try:
-            if self.directory_conditions is None:
-                formatters = self.directory_formatters
-            else:
-                for condition, formatters in self.directory_conditions:
-                    if condition(kwdict):
-                        break
-                else:
+            if segments is None:
+                if self.directory_conditions is None:
                     formatters = self.directory_formatters
+                else:
+                    for condition, formatters in self.directory_conditions:
+                        if condition(kwdict):
+                            break
+                    else:
+                        formatters = self.directory_formatters
+            else:
+                formatters = [formatter.parse(fmt).format_map
+                              for fmt in segments]
 
             segments = []
             strip = self.strip
@@ -307,6 +314,38 @@ class PathFormat():
         self.realpath = self.realdirectory + filename
         if not self.temppath:
             self.temppath = self.realpath
+
+    def generate_path(self, segments):
+        if not segments:
+            return ""
+
+        root = segments[0]
+        if root[0] == ":":
+            if ":basedirectory".startswith(root):
+                root = self.basedirectory
+            elif ":directory".startswith(root):
+                root = self.realdirectory
+            elif root.startswith(":~"):
+                root = os.path.expanduser(root[1:])
+            elif root.startswith(":$"):
+                root = os.environ.get(root[2:])
+        elif WINDOWS:
+            s = root[:3].replace("/", "\\")
+            if not s.startswith(":", 1) and not s.startswith("\\\\"):
+                root = None
+        elif not root.startswith("/"):
+            root = None
+
+        if root is None:
+            path = self.clean_path(os.sep.join(self.build_directory(
+                self.kwdict, segments)))
+        else:
+            if root[-1] != os.sep:
+                root += os.sep
+            path = root + self.clean_path(os.sep.join(self.build_directory(
+                self.kwdict, segments[1:])))
+
+        return path
 
     def part_enable(self, part_directory=None):
         """Enable .part file usage"""

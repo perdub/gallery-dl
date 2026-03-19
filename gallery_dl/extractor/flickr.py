@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2017-2025 Mike Fährmann
+# Copyright 2017-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +9,7 @@
 """Extractors for https://www.flickr.com/"""
 
 from .common import Extractor, Message
-from .. import text, oauth, util, exception
-from ..cache import memcache
+from .. import text, oauth, util
 
 BASE_PATTERN = r"(?:https?://)?(?:www\.|secure\.|m\.)?flickr\.com"
 
@@ -290,12 +289,8 @@ class FlickrAPI(oauth.OAuth1API):
     }
 
     @property
-    @memcache(maxage=3600)
     def API_KEY(self):
-        extr = self.extractor
-        extr.log.info("Retrieving public API key")
-        page = extr.request(extr.root + "/prints").text
-        return text.extr(page, '.flickr.api.site_key = "', '"')
+        return self.extractor.cache(self._extract_apikey, _key=None, _exp=3600)
 
     def __init__(self, extractor):
         oauth.OAuth1API.__init__(self, extractor)
@@ -459,14 +454,14 @@ class FlickrAPI(oauth.OAuth1API):
             msg = data.get("message", "")
             self.log.debug("Server response: %s", data)
             if data["code"] == 1:
-                raise exception.NotFoundError(self.extractor.subcategory)
+                raise self.exc.NotFoundError(self.extractor.subcategory)
             elif data["code"] == 2:
-                raise exception.AuthorizationError(msg)
+                raise self.exc.AuthorizationError(msg)
             elif data["code"] == 98:
-                raise exception.AuthenticationError(msg)
+                raise self.exc.AuthenticationError(msg)
             elif data["code"] == 99:
-                raise exception.AuthorizationError(msg)
-            raise exception.AbortExtraction("API request failed: " + msg)
+                raise self.exc.AuthorizationError(msg)
+            raise self.exc.AbortExtraction("API request failed: " + msg)
         return data
 
     def _pagination(self, method, params, key="photos"):
@@ -500,6 +495,12 @@ class FlickrAPI(oauth.OAuth1API):
             if params["page"] >= data["pages"]:
                 return
             params["page"] += 1
+
+    def _extract_apikey(self):
+        extr = self.extractor
+        extr.log.info("Retrieving public API key")
+        page = extr.request(extr.root + "/prints").text
+        return text.extr(page, '.flickr.api.site_key = "', '"')
 
     def _extract_format(self, photo):
         photo["description"] = photo["description"]["_content"].strip()

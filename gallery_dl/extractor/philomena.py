@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright 2021-2025 Mike Fährmann
+# Copyright 2021-2026 Mike Fährmann
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,7 +9,7 @@
 """Extractors for Philomena sites"""
 
 from .booru import BooruExtractor
-from .. import text, exception
+from .. import text
 
 
 class PhilomenaExtractor(BooruExtractor):
@@ -113,7 +113,7 @@ class PhilomenaGalleryExtractor(PhilomenaExtractor):
         try:
             return {"gallery": self.api.gallery(self.groups[-1])}
         except IndexError:
-            raise exception.NotFoundError("gallery")
+            raise self.exc.NotFoundError("gallery")
 
     def posts(self):
         gallery_id = "gallery_id:" + self.groups[-1]
@@ -159,7 +159,7 @@ class PhilomenaAPI():
 
             # error
             self.extractor.log.debug(response.content)
-            raise exception.HttpError("", response)
+            raise self.extractor.exc.HttpError("", response)
 
     def _pagination(self, endpoint, params):
         extr = self.extractor
