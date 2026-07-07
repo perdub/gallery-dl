@@ -18,7 +18,7 @@ BASE_PATTERN = (r"(?:https?://)?(?:www\.)?"
 
 
 class IdolcomplexBase():
-    #"""Base class for idolcomplex extractors"""
+#Base class for idolcomplex extractors
     category = "idolcomplex"
     root = "https://www.idolcomplex.com"
     cookies_domain = ".idolcomplex.com"
@@ -30,19 +30,19 @@ class IdolcomplexBase():
 
 
 class IdolcomplexTagExtractor(IdolcomplexBase, sankaku.SankakuTagExtractor):
-    #"""Extractor for idolcomplex tag searches"""
+#Extractor for idolcomplex tag searches
     pattern = BASE_PATTERN + r"(?:/posts)?/?\?([^#]*)"
     example = "https://www.idolcomplex.com/en/posts?tags=TAGS"
 
 
 class IdolcomplexPoolExtractor(IdolcomplexBase, sankaku.SankakuPoolExtractor):
-    #"""Extractor for idolcomplex pools"""
+#Extractor for idolcomplex pools
     pattern = BASE_PATTERN + r"/pools?/(?:show/)?(\w+)"
     example = "https://www.idolcomplex.com/en/pools/0123456789abcdef"
 
 
 class IdolcomplexPostExtractor(IdolcomplexBase, sankaku.SankakuPostExtractor):
-    #"""Extractor for individual idolcomplex posts"""
+#Extractor for individual idolcomplex posts
     pattern = BASE_PATTERN + r"/posts?(?:/show)?/(\w+)"
     example = "https://www.idolcomplex.com/en/posts/0123456789abcdef"
 """
