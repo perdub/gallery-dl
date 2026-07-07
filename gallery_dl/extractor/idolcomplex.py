@@ -6,8 +6,10 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation.
 
-"""Extractors for https://www.idolcomplex.com/"""
+# we use other path idk but this implementation dosent work for me.
 
+"""Extractors for https://www.idolcomplex.com/"""
+"""
 from . import sankaku
 
 BASE_PATTERN = (r"(?:https?://)?(?:www\.)?"
@@ -43,3 +45,4 @@ class IdolcomplexPostExtractor(IdolcomplexBase, sankaku.SankakuPostExtractor):
     """Extractor for individual idolcomplex posts"""
     pattern = BASE_PATTERN + r"/posts?(?:/show)?/(\w+)"
     example = "https://www.idolcomplex.com/en/posts/0123456789abcdef"
+"""
