@@ -10,6 +10,7 @@ import sys
 from ..text import re_compile
 
 modules = [
+    "smgredirect",
     "goonbox",
     "2ch",
     "2chan",
