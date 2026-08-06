@@ -93,7 +93,7 @@ class GoonboxImageExtractor(Extractor):
         # 5. Возвращаем кортежи
         
         # Сообщаем папку/метаданные галереи
-        yield Message.Directory, post_data
+        yield Message.Directory, "", post_data
         
         # Сообщаем сам файл для скачивания
         yield Message.Url, file_url, post_data
